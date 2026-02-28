@@ -6,8 +6,9 @@ from pathlib import Path
 
 from .errors import (
     InvalidYouTubeUrl,
+    LLMConfigError,
+    LLMError,
     NoTranscriptFound,
-    OpenRouterError,
     OutputDirectoryError,
     OutputFileExistsError,
     OutputWriteError,
@@ -15,7 +16,7 @@ from .errors import (
     TranscriptFetchError,
 )
 from .formatting import sanitize_filename, transcript_to_markdown
-from .openrouter import chat_completion
+from .llm_router import summarize as llm_summarize
 from .youtube import (
     extract_video_id,
     fetch_transcript,
@@ -64,23 +65,49 @@ def build_parser() -> argparse.ArgumentParser:
         help="Whether existing output files may be overwritten. Default: no",
     )
 
-    # OpenRouter / Summarization options
+    # LLM summarization options
     parser.add_argument(
         "--summarize",
         action="store_true",
-        help="Generate a summary using OpenRouter after fetching the transcript.",
+        help="Generate a summary after fetching the transcript.",
+    )
+
+    parser.add_argument(
+        "--provider",
+        choices=["openrouter", "ollama"],
+        default="openrouter",
+        help="LLM provider for summarization. Default: openrouter",
     )
 
     parser.add_argument(
         "--model",
         default=None,
-        help="OpenRouter model ID for summarization (e.g. openai/gpt-4o-mini). Required if --summarize is set.",
+        help="Model ID for summarization (OpenRouter or Ollama). Required if --summarize is set.",
     )
 
     parser.add_argument(
         "--prompt-file",
         default="prompt.md",
         help="Path to the prompt template file. Default: prompt.md",
+    )
+
+    parser.add_argument(
+        "--ollama-base-url",
+        default="http://localhost:11434",
+        help="Ollama base URL. Default: http://localhost:11434",
+    )
+
+    parser.add_argument(
+        "--ollama-generate-path",
+        default="/api/generate",
+        help="Ollama generate endpoint path. Default: /api/generate",
+    )
+
+    parser.add_argument(
+        "--llm-timeout",
+        type=float,
+        default=120.0,
+        help="LLM request timeout in seconds. Default: 120",
     )
 
     return parser
@@ -213,16 +240,23 @@ def main(argv: list[str] | None = None) -> int:
                 transcript=transcript_md,
             )
 
-            print(f"Generating summary with {args.model}...")
-            summary = chat_completion(
+            print(f"Generating summary with {args.provider}:{args.model}...")
+            summary = llm_summarize(
+                provider=args.provider,
                 model=args.model,
-                messages=[{"role": "user", "content": prompt}],
+                prompt=prompt,
+                timeout=args.llm_timeout,
+                ollama_base_url=args.ollama_base_url,
+                ollama_generate_path=args.ollama_generate_path,
             )
         except PromptFileNotFound as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 6
-        except OpenRouterError as exc:
-            print(f"OpenRouter error: {exc}", file=sys.stderr)
+        except LLMConfigError as exc:
+            print(f"LLM configuration error: {exc}", file=sys.stderr)
+            return 11
+        except LLMError as exc:
+            print(f"LLM error: {exc}", file=sys.stderr)
             return 7
 
         try:

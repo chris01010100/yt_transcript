@@ -36,7 +36,7 @@ yt-transcript --help
 ## Benutzung
 
 ```bash
-yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --model <model_id>]
+yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --provider <openrouter|ollama> --model <model_id>] [--llm-timeout <seconds>]
 ```
 
 ## Beispiele
@@ -59,10 +59,22 @@ Sprachpriorität setzen:
 yt-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --lang de --lang en
 ```
 
-Transcript + Zusammenfassung über OpenRouter:
+Transcript + Zusammenfassung über OpenRouter (Default Provider):
 
 ```bash
 OPENROUTER_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini"
+```
+
+Zusammenfassung über Ollama (`/api/generate`):
+
+```bash
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --provider ollama --model "qwen2.5:3b"
+```
+
+Ollama mit eigener Instanz / eigenem Endpoint:
+
+```bash
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --provider ollama --model "qwen2.5:3b" --ollama-base-url "http://192.168.1.10:11434" --ollama-generate-path "/api/generate"
 ```
 
 In ein bestimmtes Verzeichnis schreiben (muss existieren):
@@ -122,18 +134,39 @@ Transcript-Zeilenformat:
   - Steuert, ob vorhandene Zieldateien überschrieben werden dürfen.
   - Standard: `no`
 
-### Zusammenfassung (OpenRouter)
+### Zusammenfassung (LLM Provider)
 
 - `--summarize`
   - Aktiviert die Zusammenfassung nach dem Transcript-Abruf.
 
+- `--provider <openrouter|ollama>`
+  - Wählt den LLM-Provider.
+  - Standard: `openrouter`
+
 - `--model <model_id>`
-  - OpenRouter Modell-ID (z. B. `openai/gpt-4o-mini`).
+  - Modell-ID für den gewählten Provider.
+  - Beispiele:
+    - OpenRouter: `openai/gpt-4o-mini`
+    - Ollama: `qwen2.5:3b`
   - Pflicht, wenn `--summarize` gesetzt ist.
 
 - `--prompt-file <path>`
   - Pfad zur Prompt-Datei.
   - Standard: `prompt.md`
+
+- `--llm-timeout <seconds>`
+  - Timeout für LLM-Requests.
+  - Standard: `120`
+
+### Ollama (nur Generate-Endpoint)
+
+- `--ollama-base-url <url>`
+  - Basis-URL der Ollama-Instanz.
+  - Standard: `http://localhost:11434`
+
+- `--ollama-generate-path <path>`
+  - Pfad zum Generate-Endpoint.
+  - Standard: `/api/generate`
 
 
 ## Prompt
@@ -147,6 +180,14 @@ Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
 - `{{TRANSCRIPT}}`
 
 ## Versionsverlauf
+
+- **0.4**
+  - Provider-Auswahl für Zusammenfassung ergänzt: `--provider openrouter|ollama` (Default: `openrouter`)
+  - Ollama-Integration über `generate`-Endpoint implementiert
+  - Neue Ollama-Optionen: `--ollama-base-url`, `--ollama-generate-path`
+  - Neues globales LLM-Timeout: `--llm-timeout`
+  - LLM-Routing-Schicht (`llm_router.py`) eingeführt
+  - Erweitertes LLM-Errorhandling (Konfiguration/Provider/Response)
 
 - **0.3**
   - Ausgabe-Pfadsteuerung über `--output-dir` eingeführt

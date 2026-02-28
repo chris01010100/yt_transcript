@@ -21,8 +21,24 @@ class TranscriptFetchError(YTTranscriptError):
     """Raised when a transcript could not be fetched for any other reason."""
 
 
-class OpenRouterError(YTTranscriptError):
+class LLMError(YTTranscriptError):
+    """Base exception for LLM provider related failures."""
+
+
+class OpenRouterError(LLMError):
     """Raised when the OpenRouter API request fails."""
+
+
+class OllamaError(LLMError):
+    """Raised when an Ollama API request fails."""
+
+
+class LLMConfigError(LLMError):
+    """Raised when LLM provider configuration is invalid."""
+
+
+class LLMResponseFormatError(LLMError):
+    """Raised when an LLM provider returns an unexpected response format."""
 
 
 class PromptFileNotFound(YTTranscriptError):
