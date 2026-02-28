@@ -36,16 +36,24 @@ Wenn du `uv` verwendest:
 uv sync
 ```
 
+Danach kannst du das Tool aus der Projektumgebung direkt ausführen:
+
+```bash
+uv run yt-transcript <youtube_url> [--hh] [--lang <code> ...]
+```
+
 Alternativ mit `pip` (aus dem Repo-Verzeichnis):
 
 ```bash
 pip install .
 ```
 
+Danach steht das Kommando `yt-transcript` zur Verfügung.
+
 ## Benutzung
 
 ```bash
-python transcript.py <youtube_url> [--hh]
+yt-transcript <youtube_url> [--hh] [--lang <code> ...]
 ```
 
 ### Beispiele
@@ -53,13 +61,19 @@ python transcript.py <youtube_url> [--hh]
 Transcript abrufen und mit kompaktem Zeitformat speichern:
 
 ```bash
-python transcript.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+yt-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 Zeitstempel immer zweistellig mit Stunden (`HH:MM:SS`) ausgeben:
 
 ```bash
-python transcript.py "https://youtu.be/dQw4w9WgXcQ" --hh
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --hh
+```
+
+Bevorzugte Sprachen explizit setzen (repeatable):
+
+```bash
+yt-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --lang de --lang en
 ```
 
 ### Ausgabe
@@ -78,6 +92,10 @@ bzw. abhängig von der Option auch `H:MM:SS` oder `HH:MM:SS`.
 - `--hh`
   - Erzwingt ein fixes Zeitformat `HH:MM:SS`.
   - Ohne Option wird `MM:SS` verwendet (bzw. `H:MM:SS`, sobald Stunden > 0).
+
+- `--lang <code>` (repeatable)
+  - Setzt die bevorzugten Transcript-Sprachen in Reihenfolge.
+  - Standard: `--lang de --lang en`
 
 ## Versionsverlauf
 
