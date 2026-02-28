@@ -8,12 +8,20 @@ from .errors import (
     InvalidYouTubeUrl,
     NoTranscriptFound,
     OpenRouterError,
+    OutputDirectoryError,
+    OutputFileExistsError,
+    OutputWriteError,
     PromptFileNotFound,
     TranscriptFetchError,
 )
-from .formatting import transcript_to_markdown
+from .formatting import sanitize_filename, transcript_to_markdown
 from .openrouter import chat_completion
-from .youtube import extract_video_id, fetch_transcript
+from .youtube import (
+    extract_video_id,
+    fetch_transcript,
+    get_oembed_title,
+    get_video_publish_date,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +51,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    parser.add_argument(
+        "--output-dir",
+        default=".",
+        help="Directory for transcript and summary output files. Default: current directory.",
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        choices=["yes", "no"],
+        default="no",
+        help="Whether existing output files may be overwritten. Default: no",
+    )
+
     # OpenRouter / Summarization options
     parser.add_argument(
         "--summarize",
@@ -62,12 +83,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to the prompt template file. Default: prompt.md",
     )
 
-    parser.add_argument(
-        "--summary-out",
-        default=None,
-        help="Output path for the summary file. Default: <video_id>_summary.md",
-    )
-
     return parser
 
 
@@ -75,12 +90,10 @@ def load_prompt_template(prompt_file: str) -> str:
     """Load the prompt template from a file."""
     path = Path(prompt_file)
     if not path.is_absolute():
-        # Try relative to current working directory first
         cwd_path = Path.cwd() / path
         if cwd_path.exists():
             path = cwd_path
         else:
-            # Try relative to the module directory
             module_dir = Path(__file__).parent.parent.parent
             module_path = module_dir / path
             if module_path.exists():
@@ -108,15 +121,52 @@ def fill_prompt_template(
     )
 
 
+def ensure_output_dir(path: Path) -> None:
+    if not path.exists():
+        raise OutputDirectoryError(f"Output directory does not exist: {path}")
+
+    if not path.is_dir():
+        raise OutputDirectoryError(f"Output path is not a directory: {path}")
+
+
+def build_output_paths(
+    output_dir: Path, *, publish_date: str | None, safe_title: str, video_id: str
+) -> tuple[Path, Path]:
+    prefix = f"{publish_date} " if publish_date else ""
+    base = f"{prefix}{safe_title} ({video_id})"
+    raw_path = output_dir / f"{base}_raw.md"
+    summary_path = output_dir / f"{base}_summary.md"
+    return raw_path, summary_path
+
+
+def write_text_file(path: Path, content: str, *, overwrite: bool) -> None:
+    if path.exists() and not overwrite:
+        raise OutputFileExistsError(
+            f"Output file already exists and overwrite=no: {path}"
+        )
+
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise OutputWriteError(f"Could not write file '{path}': {exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     languages = args.languages or ["de", "en"]
+    overwrite = args.overwrite == "yes"
 
-    # Validate summarize options
     if args.summarize and not args.model:
         print("Error: --model is required when using --summarize", file=sys.stderr)
         return 5
+
+    try:
+        output_dir = Path(args.output_dir)
+        ensure_output_dir(output_dir)
+    except OutputDirectoryError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 8
 
     try:
         video_id = extract_video_id(args.youtube_url)
@@ -131,15 +181,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Failed to fetch transcript: {exc}", file=sys.stderr)
         return 4
 
+    title = get_oembed_title(args.youtube_url) or video_id
+    safe_title = sanitize_filename(title)
+    publish_date = get_video_publish_date(args.youtube_url)
+
+    raw_path, summary_path = build_output_paths(
+        output_dir,
+        publish_date=publish_date,
+        safe_title=safe_title,
+        video_id=video_id,
+    )
+
     transcript_md = transcript_to_markdown(transcript, full_timestamps=args.hh)
 
-    # Save transcript
-    transcript_filename = f"{video_id}.md"
-    with open(transcript_filename, "w", encoding="utf-8") as f:
-        f.write(transcript_md)
-    print(f"Saved transcript: {transcript_filename}")
+    try:
+        write_text_file(raw_path, transcript_md, overwrite=overwrite)
+    except (OutputFileExistsError, OutputWriteError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 9
 
-    # Summarize if requested
+    print(f"Saved transcript: {raw_path}")
+
     if args.summarize:
         try:
             prompt_template = load_prompt_template(args.prompt_file)
@@ -163,11 +225,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"OpenRouter error: {exc}", file=sys.stderr)
             return 7
 
-        # Save summary
-        summary_filename = args.summary_out or f"{video_id}_summary.md"
-        with open(summary_filename, "w", encoding="utf-8") as f:
-            f.write(summary)
-        print(f"Saved summary: {summary_filename}")
+        try:
+            write_text_file(summary_path, summary, overwrite=overwrite)
+        except (OutputFileExistsError, OutputWriteError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 10
+
+        print(f"Saved summary: {summary_path}")
 
     return 0
 

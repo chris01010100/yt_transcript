@@ -27,3 +27,15 @@ class OpenRouterError(YTTranscriptError):
 
 class PromptFileNotFound(YTTranscriptError):
     """Raised when the prompt template file does not exist."""
+
+
+class OutputDirectoryError(YTTranscriptError):
+    """Raised when the output directory cannot be created or used."""
+
+
+class OutputFileExistsError(YTTranscriptError):
+    """Raised when an output file exists and overwrite is disabled."""
+
+
+class OutputWriteError(YTTranscriptError):
+    """Raised when writing output files fails."""

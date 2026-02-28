@@ -6,8 +6,9 @@ CLI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeit
 
 - Nimmt eine YouTube-URL entgegen und extrahiert daraus die **Video-ID**.
 - Ruft über [`youtube-transcript-api`](https://pypi.org/project/youtube-transcript-api/) das Transcript ab (bevorzugt **Deutsch**, sonst **Englisch**).
-- Schreibt das Transcript als Markdown in **`<video_id>.md`**.
-- Optional: Erstellt eine ausführliche Zusammenfassung mit einem OpenRouter-Modell und speichert sie in **`<video_id>_summary.md`** (oder in einen von dir gewählten Pfad).
+- Schreibt das Transcript als Markdown in ein frei wählbares Ausgabeverzeichnis.
+- Optional: Erstellt eine ausführliche Zusammenfassung mit einem OpenRouter-Modell im selben Ausgabeverzeichnis.
+- Dateinamen basieren auf Videotitel + Video-ID und optional Veröffentlichungsdatum.
 
 ## Voraussetzungen
 
@@ -35,7 +36,7 @@ yt-transcript --help
 ## Benutzung
 
 ```bash
-yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--summarize --model <model_id>]
+yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --model <model_id>]
 ```
 
 ## Beispiele
@@ -64,16 +65,34 @@ Transcript + Zusammenfassung über OpenRouter:
 OPENROUTER_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini"
 ```
 
-Zusammenfassung in eigene Datei schreiben:
+In ein bestimmtes Verzeichnis schreiben (muss existieren):
 
 ```bash
-yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini" --summary-out "output/summary.md"
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --output-dir "output" --summarize --model "openai/gpt-4o-mini"
+```
+
+Überschreiben erlauben:
+
+```bash
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --output-dir "output" --overwrite yes
 ```
 
 ## Ausgabe
 
-- Transcript: **`<video_id>.md`**
-- Zusammenfassung (optional): **`<video_id>_summary.md`** oder Wert aus `--summary-out`
+Dateien werden im durch `--output-dir` angegebenen Verzeichnis gespeichert.
+
+Naming-Schema:
+
+- Wenn Veröffentlichungsdatum ermittelt werden kann:
+  - Raw: `YYYY-MM-DD <safe_title> (<video_id>)_raw.md`
+  - Summary: `YYYY-MM-DD <safe_title> (<video_id>)_summary.md`
+- Wenn kein Veröffentlichungsdatum gefunden wird:
+  - Raw: `<safe_title> (<video_id>)_raw.md`
+  - Summary: `<safe_title> (<video_id>)_summary.md`
+
+Hinweise:
+- `<safe_title>` ist der bereinigte Videotitel (dateisystemtauglich).
+- Falls kein Titel ermittelt werden kann, wird als Fallback die `video_id` genutzt.
 
 Transcript-Zeilenformat:
 
@@ -94,6 +113,15 @@ Transcript-Zeilenformat:
   - Setzt die bevorzugten Transcript-Sprachen in Reihenfolge.
   - Standard: `de`, `en`
 
+- `--output-dir <dir>`
+  - Zielverzeichnis für Raw-Transcript und Summary.
+  - Das Verzeichnis muss existieren und beschreibbar sein.
+  - Standard: aktuelles Verzeichnis `.`
+
+- `--overwrite yes|no`
+  - Steuert, ob vorhandene Zieldateien überschrieben werden dürfen.
+  - Standard: `no`
+
 ### Zusammenfassung (OpenRouter)
 
 - `--summarize`
@@ -107,9 +135,6 @@ Transcript-Zeilenformat:
   - Pfad zur Prompt-Datei.
   - Standard: `prompt.md`
 
-- `--summary-out <path>`
-  - Zielpfad für die Zusammenfassung.
-  - Standard: `<video_id>_summary.md`
 
 ## Prompt
 
@@ -123,9 +148,17 @@ Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
 
 ## Versionsverlauf
 
+- **0.3**
+  - Ausgabe-Pfadsteuerung über `--output-dir` eingeführt
+  - Überschreibverhalten über `--overwrite yes|no` ergänzt
+  - Option `--summary-out` entfernt
+  - Dateinamen auf Titel + Video-ID umgestellt und Raw/Summary-Suffix vereinheitlicht
+  - Best-effort Ermittlung des Veröffentlichungsdatums ergänzt (Prefix `YYYY-MM-DD` wenn verfügbar)
+  - Robustes Errorhandling für Ausgabeverzeichnis, existierende Dateien und Schreibfehler ergänzt
+
 - **0.2**
   - OpenRouter-Integration für optionale Transcript-Zusammenfassungen implementiert
-  - Neue CLI-Optionen: `--summarize`, `--model`, `--prompt-file`, `--summary-out`
+  - Neue CLI-Optionen: `--summarize`, `--model`, `--prompt-file`
   - Prompt-Auslagerung in `prompt.md` und Platzhalter-Befüllung im Laufzeitprozess
   - Eigene Fehlerbehandlung für Prompt/OpenRouter ergänzt
   - README überarbeitet und auf aktuellen CLI-Stand gebracht
