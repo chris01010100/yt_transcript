@@ -170,6 +170,7 @@ Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
 
 ## Todo
 
+- Integration von OLLAMA als OpenRouter Alternative
 - Fallback ohne YouTube-Transcript:
   - Audio mit yt-dlp extrahieren
   - STT mit OpenAI oder lokalem Whisper
