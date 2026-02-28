@@ -4,10 +4,10 @@ import urllib.parse
 import urllib.request
 from typing import Iterable
 
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import (
+from youtube_transcript_api import (
     NoTranscriptFound as YTApiNoTranscriptFound,
     TranscriptsDisabled,
+    YouTubeTranscriptApi,
 )
 
 from .errors import InvalidYouTubeUrl, NoTranscriptFound, TranscriptFetchError

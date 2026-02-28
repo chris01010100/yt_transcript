@@ -1,118 +1,143 @@
 # yt-transcript
 
-Kleines CLI-Script, das YouTube-Untertitel/Transkripte abruft und als Markdown-Datei mit Zeitstempeln speichert.
+CLI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter zusammenfassen kann.
 
-## Was macht das Script?
+## Was macht das Tool?
 
 - Nimmt eine YouTube-URL entgegen und extrahiert daraus die **Video-ID**.
 - Ruft über [`youtube-transcript-api`](https://pypi.org/project/youtube-transcript-api/) das Transcript ab (bevorzugt **Deutsch**, sonst **Englisch**).
-- Schreibt das Ergebnis als Markdown in eine Datei namens **`<video_id>.md`**.
-- Jede Zeile enthält einen Zeitstempel und den Text:
-  
-  ```text
-  [00:12] …
-  [00:18] …
-  ```
-
-## Grobe Funktionsweise
-
-1. **Video-ID extrahieren**: Unterstützt URLs der Formen `...watch?v=<id>` und `youtu.be/<id>`.
-2. **Transcript laden**: `api.fetch(video_id, languages=["de", "en"])`.
-3. **Zeitstempel formatieren**:
-   - Standard: `MM:SS` (oder `H:MM:SS`, sobald Stunden auftreten)
-   - Mit `--hh`: immer `HH:MM:SS`
-4. **Datei schreiben**: Ausgabe wird in `<video_id>.md` im aktuellen Verzeichnis gespeichert.
+- Schreibt das Transcript als Markdown in **`<video_id>.md`**.
+- Optional: Erstellt eine ausführliche Zusammenfassung mit einem OpenRouter-Modell und speichert sie in **`<video_id>_summary.md`** (oder in einen von dir gewählten Pfad).
 
 ## Voraussetzungen
 
 - Python **>= 3.12**
-- Abhängigkeit: `youtube-transcript-api`
+- Dependencies:
+  - `youtube-transcript-api`
+  - `httpx`
+- Für Zusammenfassungen: `OPENROUTER_API_KEY` als Umgebungsvariable
 
 ## Installation
 
-Wenn du `uv` verwendest:
+Mit `uv`:
 
 ```bash
 uv sync
+uv pip install -e .
 ```
 
-Danach kannst du das Tool aus der Projektumgebung direkt ausführen:
+Danach ist das Kommando verfügbar:
 
 ```bash
-uv run yt-transcript <youtube_url> [--hh] [--lang <code> ...]
+yt-transcript --help
 ```
-
-Alternativ mit `pip` (aus dem Repo-Verzeichnis):
-
-```bash
-pip install .
-```
-
-Danach steht das Kommando `yt-transcript` zur Verfügung.
 
 ## Benutzung
 
 ```bash
-yt-transcript <youtube_url> [--hh] [--lang <code> ...]
+yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--summarize --model <model_id>]
 ```
 
-### Beispiele
+## Beispiele
 
-Transcript abrufen und mit kompaktem Zeitformat speichern:
+Transcript abrufen und speichern:
 
 ```bash
 yt-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
-Zeitstempel immer zweistellig mit Stunden (`HH:MM:SS`) ausgeben:
+Zeitstempel als `HH:MM:SS` erzwingen:
 
 ```bash
 yt-transcript "https://youtu.be/dQw4w9WgXcQ" --hh
 ```
 
-Bevorzugte Sprachen explizit setzen (repeatable):
+Sprachpriorität setzen:
 
 ```bash
 yt-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --lang de --lang en
 ```
 
-### Ausgabe
+Transcript + Zusammenfassung über OpenRouter:
 
-- Es wird eine Datei **`<video_id>.md`** erstellt (z.B. `dQw4w9WgXcQ.md`).
-- Format pro Zeile:
+```bash
+OPENROUTER_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini"
+```
+
+Zusammenfassung in eigene Datei schreiben:
+
+```bash
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini" --summary-out "output/summary.md"
+```
+
+## Ausgabe
+
+- Transcript: **`<video_id>.md`**
+- Zusammenfassung (optional): **`<video_id>_summary.md`** oder Wert aus `--summary-out`
+
+Transcript-Zeilenformat:
 
 ```text
 [MM:SS] Text
 ```
 
-bzw. abhängig von der Option auch `H:MM:SS` oder `HH:MM:SS`.
+(je nach Option auch `H:MM:SS` oder `HH:MM:SS`)
 
 ## CLI Optionen
 
+### Transcript
+
 - `--hh`
-  - Erzwingt ein fixes Zeitformat `HH:MM:SS`.
-  - Ohne Option wird `MM:SS` verwendet (bzw. `H:MM:SS`, sobald Stunden > 0).
+  - Erzwingt fixes Zeitformat `HH:MM:SS`.
 
 - `--lang <code>` (repeatable)
   - Setzt die bevorzugten Transcript-Sprachen in Reihenfolge.
-  - Standard: `--lang de --lang en`
+  - Standard: `de`, `en`
+
+### Zusammenfassung (OpenRouter)
+
+- `--summarize`
+  - Aktiviert die Zusammenfassung nach dem Transcript-Abruf.
+
+- `--model <model_id>`
+  - OpenRouter Modell-ID (z. B. `openai/gpt-4o-mini`).
+  - Pflicht, wenn `--summarize` gesetzt ist.
+
+- `--prompt-file <path>`
+  - Pfad zur Prompt-Datei.
+  - Standard: `prompt.md`
+
+- `--summary-out <path>`
+  - Zielpfad für die Zusammenfassung.
+  - Standard: `<video_id>_summary.md`
+
+## Prompt
+
+Der Prompt für die Zusammenfassung liegt in [prompt.md](prompt.md).
+Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
+
+- `{{SOURCE_URL}}`
+- `{{VIDEO_ID}}`
+- `{{MODEL_NAME}}`
+- `{{TRANSCRIPT}}`
 
 ## Versionsverlauf
 
+- **0.2**
+  - OpenRouter-Integration für optionale Transcript-Zusammenfassungen implementiert
+  - Neue CLI-Optionen: `--summarize`, `--model`, `--prompt-file`, `--summary-out`
+  - Prompt-Auslagerung in `prompt.md` und Platzhalter-Befüllung im Laufzeitprozess
+  - Eigene Fehlerbehandlung für Prompt/OpenRouter ergänzt
+  - README überarbeitet und auf aktuellen CLI-Stand gebracht
+
 - **0.1**
-  - Initiale Version: Transcript abrufen (de/en), Zeitstempel formatieren, Ausgabe als `<video_id>.md`.
+  - Initiale Transcript-Version
+  - Projektstruktur auf `src/yt_transcript` umgestellt
+  - CLI über `yt-transcript`
 
 ## Todo
 
-- **Transcript per LLM zusammenfassen** und die Zusammenfassung als **formatierte Markdown-Datei für Obsidian** mit **YAML Frontmatter** speichern.
-  - Routing über **OpenRouter-API** oder **lokales LLM** wie Ollama
-  - Das zu verwendende LLM/Model soll **flexibel als Variable** konfigurierbar sein (z.B. CLI-Parameter `--model` oder Env `OPENROUTER_MODEL`).
-  - Die Zusammenfassung soll **ausführlich** sein.
-- **Wenn es kein Transcript gibt oder wenn ich ein neues Transcript als Option erstellen will**
-    - mit yt-dl soll das Audio aus dem Video extrahiert, heruntergeladen werden
-    - Anschliessend soll die Audio Datei mit LLM transcribiert werden. Es soll OpenAI STT oder lokale Modelle wie Whisper unterstützt werden
-    - Das neu erstellte Transcript soll anschliessend wie ein auch per LLM (Openrouter oder lokales LLM) zusammengefasst und in einer Markdown Datei für Obsidian mit YAML Frontmatter gespeichert werden
-
-### Prompt
-
-Siehe [prompt.md](prompt.md).
+- Fallback ohne YouTube-Transcript:
+  - Audio mit yt-dlp extrahieren
+  - STT mit OpenAI oder lokalem Whisper
+  - Danach ebenfalls zusammenfassen und als Obsidian-Markdown mit YAML Frontmatter speichern

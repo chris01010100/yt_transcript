@@ -19,3 +19,11 @@ class NoTranscriptFound(YTTranscriptError):
 
 class TranscriptFetchError(YTTranscriptError):
     """Raised when a transcript could not be fetched for any other reason."""
+
+
+class OpenRouterError(YTTranscriptError):
+    """Raised when the OpenRouter API request fails."""
+
+
+class PromptFileNotFound(YTTranscriptError):
+    """Raised when the prompt template file does not exist."""
