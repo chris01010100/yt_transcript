@@ -211,7 +211,28 @@ Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
 
 ## Todo
 
-- Integration von OLLAMA als OpenRouter Alternative
+- Roh-Text in Chunks aufteilen.
+  - maximal 2000-3000 Wörter
+  - Overlap 200-400 Wörter
+  - nicht mitten im Satz schneiden
+  - Beispielprompt für Zusammenfassung der einzelnen Chunks:
+    '''
+      Fasse den folgenden Textabschnitt strukturiert zusammen.
+
+      Erstelle:
+      1. wichtigste Aussagen
+      2. relevante Details
+      3. Schlussfolgerungen oder Empfehlungen
+      4. besondere Zahlen, Fakten oder Beispiele
+
+      Nutze prägnante Stichpunkte.
+      Erfinde nichts.
+      Antworte in derselben Sprache wie der Text.
+
+      Text:
+      {chunk}
+    '''
+  - Am Ende die Summaries der Chunks zusammenbauen und eine End Zusammenfassung bauen
 - Fallback ohne YouTube-Transcript:
   - Audio mit yt-dlp extrahieren
   - STT mit OpenAI oder lokalem Whisper
