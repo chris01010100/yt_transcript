@@ -1,14 +1,15 @@
 # yt-transcript
 
-CLI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter zusammenfassen kann.
+CLI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter oder Ollama zusammenfasst.
 
 ## Was macht das Tool?
 
 - Nimmt eine YouTube-URL entgegen und extrahiert daraus die **Video-ID**.
 - Ruft über [`youtube-transcript-api`](https://pypi.org/project/youtube-transcript-api/) das Transcript ab (bevorzugt **Deutsch**, sonst **Englisch**).
 - Schreibt das Transcript als Markdown in ein frei wählbares Ausgabeverzeichnis.
-- Optional: Erstellt eine ausführliche Zusammenfassung mit einem OpenRouter-Modell im selben Ausgabeverzeichnis.
+- Optional: Erstellt eine ausführliche Zusammenfassung mit OpenRouter oder Ollama im selben Ausgabeverzeichnis.
 - Dateinamen basieren auf Videotitel + Video-ID und optional Veröffentlichungsdatum.
+- Für lange Transkripte: textbasiertes Chunking + Map/Reduce + Cache/Resume.
 
 ## Voraussetzungen
 
@@ -36,7 +37,7 @@ yt-transcript --help
 ## Benutzung
 
 ```bash
-yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --provider <openrouter|ollama> --model <model_id>] [--llm-timeout <seconds>]
+yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --provider <openrouter|ollama> --model <model_id>] [--llm-timeout <seconds>] [--chunk-max-chars <n>] [--chunk-overlap-chars <n>] [--chunk-max-chunks <n>] [--chunk-cache-dir <path>]
 ```
 
 ## Beispiele
@@ -63,6 +64,12 @@ Transcript + Zusammenfassung über OpenRouter (Default Provider):
 
 ```bash
 OPENROUTER_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini"
+```
+
+Lange Transkripte mit Chunking + Cache (resumierbar):
+
+```bash
+yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --provider ollama --model "qwen2.5:3b" --chunk-max-chars 7000 --chunk-overlap-chars 900 --chunk-cache-dir ".cache/yt-transcript"
 ```
 
 Zusammenfassung über Ollama (`/api/generate`):
@@ -158,6 +165,25 @@ Transcript-Zeilenformat:
   - Timeout für LLM-Requests.
   - Standard: `120`
 
+### Chunking / Map-Reduce (lange Transkripte)
+
+- `--chunk-max-chars <n>`
+  - Maximale Zeichenanzahl pro Chunk.
+  - Standard: `8000`
+
+- `--chunk-overlap-chars <n>`
+  - Zeichen-Overlap zwischen benachbarten Chunks.
+  - Standard: `1000`
+
+- `--chunk-max-chunks <n>`
+  - Sicherheitslimit für Anzahl der Chunks.
+  - `0` bedeutet unbegrenzt.
+  - Standard: `0`
+
+- `--chunk-cache-dir <path>`
+  - Cache-Verzeichnis für Chunk-Zwischensummaries (Resume bei Abbruch).
+  - Standard: `.cache/yt-transcript`
+
 ### Ollama (nur Generate-Endpoint)
 
 - `--ollama-base-url <url>`
@@ -171,15 +197,33 @@ Transcript-Zeilenformat:
 
 ## Prompt
 
-Der Prompt für die Zusammenfassung liegt in [prompt.md](prompt.md).
-Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
+- Finale Zusammenfassung: [prompt.md](prompt.md) (über `--prompt-file` konfigurierbar)
+- Teilzusammenfassungen (Chunk-Map): [prompt_chunks.md](prompt_chunks.md) (fester Dateiname, ohne CLI-Option)
 
+Platzhalter in `prompt.md`:
 - `{{SOURCE_URL}}`
 - `{{VIDEO_ID}}`
 - `{{MODEL_NAME}}`
 - `{{TRANSCRIPT}}`
 
+Platzhalter in `prompt_chunks.md`:
+- `{{SOURCE_URL}}`
+- `{{VIDEO_ID}}`
+- `{{MODEL_NAME}}`
+- `{{CHUNK_INDEX}}`
+- `{{CHUNK_START_CHAR}}`
+- `{{CHUNK_END_CHAR}}`
+- `{{CHUNK_TEXT}}`
+
 ## Versionsverlauf
+
+- **0.5**
+  - Textbasiertes Chunking für lange Transkripte implementiert (Whisper-kompatibel)
+  - Neue CLI-Optionen: `--chunk-max-chars`, `--chunk-overlap-chars`, `--chunk-max-chunks`, `--chunk-cache-dir`
+  - Map/Reduce-Pipeline eingeführt (Chunk-Zusammenfassungen + finale Zusammenfassung)
+  - Cache/Resume für Chunk-Summaries implementiert
+  - Neuer Chunk-Prompt in `prompt_chunks.md`
+  - Errorhandling für Chunking/Cache ergänzt
 
 - **0.4**
   - Provider-Auswahl für Zusammenfassung ergänzt: `--provider openrouter|ollama` (Default: `openrouter`)
@@ -211,28 +255,6 @@ Er wird beim Zusammenfassen geladen und mit Platzhaltern befüllt:
 
 ## Todo
 
-- Roh-Text in Chunks aufteilen.
-  - maximal 2000-3000 Wörter
-  - Overlap 200-400 Wörter
-  - nicht mitten im Satz schneiden
-  - Beispielprompt für Zusammenfassung der einzelnen Chunks:
-    '''
-      Fasse den folgenden Textabschnitt strukturiert zusammen.
-
-      Erstelle:
-      1. wichtigste Aussagen
-      2. relevante Details
-      3. Schlussfolgerungen oder Empfehlungen
-      4. besondere Zahlen, Fakten oder Beispiele
-
-      Nutze prägnante Stichpunkte.
-      Erfinde nichts.
-      Antworte in derselben Sprache wie der Text.
-
-      Text:
-      {chunk}
-    '''
-  - Am Ende die Summaries der Chunks zusammenbauen und eine End Zusammenfassung bauen
 - Fallback ohne YouTube-Transcript:
   - Audio mit yt-dlp extrahieren
   - STT mit OpenAI oder lokalem Whisper

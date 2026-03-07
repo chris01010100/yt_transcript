@@ -55,3 +55,11 @@ class OutputFileExistsError(YTTranscriptError):
 
 class OutputWriteError(YTTranscriptError):
     """Raised when writing output files fails."""
+
+
+class ChunkingError(YTTranscriptError):
+    """Raised when transcript chunking fails or chunk settings are invalid."""
+
+
+class ChunkCacheError(YTTranscriptError):
+    """Raised when reading/writing chunk cache fails."""

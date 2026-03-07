@@ -4,7 +4,18 @@ import argparse
 import sys
 from pathlib import Path
 
+from .chunk_cache import (
+    ChunkCacheItem,
+    compute_run_id,
+    ensure_cache_dir,
+    load_chunk_summary,
+    save_chunk_summary,
+    sha256_text,
+)
+from .chunking import build_text_chunks
 from .errors import (
+    ChunkCacheError,
+    ChunkingError,
     InvalidYouTubeUrl,
     LLMConfigError,
     LLMError,
@@ -110,6 +121,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM request timeout in seconds. Default: 120",
     )
 
+    parser.add_argument(
+        "--chunk-max-chars",
+        type=int,
+        default=8000,
+        help="Max characters per chunk for map/reduce summarization. Default: 8000",
+    )
+
+    parser.add_argument(
+        "--chunk-overlap-chars",
+        type=int,
+        default=1000,
+        help="Character overlap between adjacent chunks. Default: 1000",
+    )
+
+    parser.add_argument(
+        "--chunk-max-chunks",
+        type=int,
+        default=0,
+        help="Safety limit for number of chunks. 0 means unlimited. Default: 0",
+    )
+
+    parser.add_argument(
+        "--chunk-cache-dir",
+        default=".cache/yt-transcript",
+        help="Directory for chunk summary cache (resume support). Default: .cache/yt-transcript",
+    )
+
     return parser
 
 
@@ -132,6 +170,20 @@ def load_prompt_template(prompt_file: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def load_chunk_prompt_template() -> str:
+    """Load chunk prompt template from fixed file prompt_chunks.md."""
+    filename = "prompt_chunks.md"
+    path = Path.cwd() / filename
+    if not path.exists():
+        module_dir = Path(__file__).parent.parent.parent
+        path = module_dir / filename
+
+    if not path.exists():
+        raise PromptFileNotFound(f"Chunk prompt file not found: {filename}")
+
+    return path.read_text(encoding="utf-8")
+
+
 def fill_prompt_template(
     template: str,
     source_url: str,
@@ -145,6 +197,29 @@ def fill_prompt_template(
         .replace("{{VIDEO_ID}}", video_id)
         .replace("{{MODEL_NAME}}", model_name)
         .replace("{{TRANSCRIPT}}", transcript)
+    )
+
+
+def fill_chunk_prompt_template(
+    template: str,
+    *,
+    source_url: str,
+    video_id: str,
+    model_name: str,
+    chunk_index: int,
+    chunk_start_char: int,
+    chunk_end_char: int,
+    chunk_text: str,
+) -> str:
+    """Replace placeholders in chunk prompt template."""
+    return (
+        template.replace("{{SOURCE_URL}}", source_url)
+        .replace("{{VIDEO_ID}}", video_id)
+        .replace("{{MODEL_NAME}}", model_name)
+        .replace("{{CHUNK_INDEX}}", str(chunk_index))
+        .replace("{{CHUNK_START_CHAR}}", str(chunk_start_char))
+        .replace("{{CHUNK_END_CHAR}}", str(chunk_end_char))
+        .replace("{{CHUNK_TEXT}}", chunk_text)
     )
 
 
@@ -231,27 +306,119 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.summarize:
         try:
-            prompt_template = load_prompt_template(args.prompt_file)
-            prompt = fill_prompt_template(
-                prompt_template,
-                source_url=args.youtube_url,
-                video_id=video_id,
-                model_name=args.model,
-                transcript=transcript_md,
+            final_prompt_template = load_prompt_template(args.prompt_file)
+            chunk_prompt_template = load_chunk_prompt_template()
+        except PromptFileNotFound as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 6
+
+        try:
+            chunks = build_text_chunks(
+                transcript_md,
+                max_chars=args.chunk_max_chars,
+                overlap_chars=args.chunk_overlap_chars,
+                max_chunks=args.chunk_max_chunks,
             )
 
-            print(f"Generating summary with {args.provider}:{args.model}...")
+            chunk_prompt_hash = sha256_text(chunk_prompt_template)
+            final_prompt_hash = sha256_text(final_prompt_template)
+            run_id = compute_run_id(
+                video_id=video_id,
+                provider=args.provider,
+                model=args.model,
+                chunk_max_chars=args.chunk_max_chars,
+                chunk_overlap_chars=args.chunk_overlap_chars,
+                chunk_max_chunks=args.chunk_max_chunks,
+                chunk_prompt_hash=chunk_prompt_hash,
+                final_prompt_hash=final_prompt_hash,
+            )
+
+            cache_root = Path(args.chunk_cache_dir)
+            cache_dir = cache_root / video_id / run_id
+            ensure_cache_dir(cache_dir)
+
+            chunk_summaries: list[str] = []
+
+            for chunk in chunks:
+                chunk_sha = sha256_text(chunk.text)
+                cached = load_chunk_summary(
+                    cache_dir,
+                    chunk.index,
+                    expected_text_sha=chunk_sha,
+                )
+                if cached:
+                    print(f"Using cached chunk summary {chunk.index + 1}/{len(chunks)}")
+                    chunk_summaries.append(cached)
+                    continue
+
+                chunk_prompt = fill_chunk_prompt_template(
+                    chunk_prompt_template,
+                    source_url=args.youtube_url,
+                    video_id=video_id,
+                    model_name=args.model,
+                    chunk_index=chunk.index,
+                    chunk_start_char=chunk.start_char,
+                    chunk_end_char=chunk.end_char,
+                    chunk_text=chunk.text,
+                )
+
+                print(f"Summarizing chunk {chunk.index + 1}/{len(chunks)}...")
+                chunk_summary = llm_summarize(
+                    provider=args.provider,
+                    model=args.model,
+                    prompt=chunk_prompt,
+                    timeout=args.llm_timeout,
+                    ollama_base_url=args.ollama_base_url,
+                    ollama_generate_path=args.ollama_generate_path,
+                )
+
+                save_chunk_summary(
+                    cache_dir,
+                    ChunkCacheItem(
+                        chunk_index=chunk.index,
+                        start_char=chunk.start_char,
+                        end_char=chunk.end_char,
+                        text_sha256=chunk_sha,
+                        summary_md=chunk_summary,
+                    ),
+                )
+                chunk_summaries.append(chunk_summary)
+        except ChunkingError as exc:
+            print(f"Chunking error: {exc}", file=sys.stderr)
+            return 12
+        except ChunkCacheError as exc:
+            print(f"Chunk cache error: {exc}", file=sys.stderr)
+            return 13
+        except LLMConfigError as exc:
+            print(f"LLM configuration error: {exc}", file=sys.stderr)
+            return 11
+        except LLMError as exc:
+            print(f"LLM error: {exc}", file=sys.stderr)
+            return 7
+
+        aggregated_chunk_summaries = "\n\n".join(
+            f"## Chunk {idx + 1}\n{summary}"
+            for idx, summary in enumerate(chunk_summaries)
+        )
+
+        final_prompt = fill_prompt_template(
+            final_prompt_template,
+            source_url=args.youtube_url,
+            video_id=video_id,
+            model_name=args.model,
+            transcript=aggregated_chunk_summaries,
+        )
+
+        try:
+            print(f"Generating final summary with {args.provider}:{args.model}...")
             summary = llm_summarize(
                 provider=args.provider,
                 model=args.model,
-                prompt=prompt,
+                prompt=final_prompt,
                 timeout=args.llm_timeout,
                 ollama_base_url=args.ollama_base_url,
                 ollama_generate_path=args.ollama_generate_path,
             )
-        except PromptFileNotFound as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 6
         except LLMConfigError as exc:
             print(f"LLM configuration error: {exc}", file=sys.stderr)
             return 11
