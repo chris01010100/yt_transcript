@@ -1,6 +1,6 @@
 # yt-transcript
 
-CLI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter oder Ollama zusammenfasst.
+CLI- und WebUI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter oder Ollama zusammenfasst.
 
 ## Was macht das Tool?
 
@@ -8,6 +8,7 @@ CLI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeit
 - Ruft über [`youtube-transcript-api`](https://pypi.org/project/youtube-transcript-api/) das Transcript ab (bevorzugt **Deutsch**, sonst **Englisch**).
 - Schreibt das Transcript als Markdown in ein frei wählbares Ausgabeverzeichnis.
 - Optional: Erstellt eine ausführliche Zusammenfassung mit OpenRouter oder Ollama im selben Ausgabeverzeichnis.
+- Unterstützt zwei Betriebsmodi: klassische **CLI** und moderne **WebUI (Flet)**.
 - Dateinamen basieren auf Videotitel + Video-ID und optional Veröffentlichungsdatum.
 - Für lange Transkripte: textbasiertes Chunking + Map/Reduce + Cache/Resume.
 
@@ -28,17 +29,45 @@ uv sync
 uv pip install -e .
 ```
 
-Danach ist das Kommando verfügbar:
+Danach sind die Kommandos verfügbar:
 
 ```bash
 yt-transcript --help
+yt-transcript-web
 ```
 
-## Benutzung
+## CLI Benutzung
 
 ```bash
 yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --provider <openrouter|ollama> --model <model_id>] [--llm-timeout <seconds>] [--chunk-max-chars <n>] [--chunk-overlap-chars <n>] [--chunk-max-chunks <n>] [--chunk-cache-dir <path>]
 ```
+
+## WebUI Benutzung (Flet)
+
+Start der WebUI:
+
+```bash
+yt-transcript-web
+```
+
+Standardmäßig startet die WebUI auf `0.0.0.0:8550`.
+
+Konfigurierbar über Umgebungsvariablen:
+
+```bash
+YT_TRANSCRIPT_WEB_HOST=0.0.0.0 YT_TRANSCRIPT_WEB_PORT=8550 yt-transcript-web
+```
+
+### WebUI Features
+
+- Responsive UI (Desktop + Mobile Browser)
+- 3-stufiges Theme: **System / Light / Dark**
+- Eingaben: YouTube-URL, Provider (`openrouter` / `ollama`), Modell, Prompt-Datei, Sprachen, Overwrite-Toggle
+- Summarize ist in der WebUI fix auf **yes** gesetzt
+- Ollama-spezifische Felder werden nur bei `provider=ollama` eingeblendet
+- Kompakter Log-Bereich mit Fortschritt
+- Summary wird nach Abschluss direkt als Markdown in der UI gerendert
+- Ausgabedateien landen standardmäßig im Ordner `output/` (wird bei Bedarf angelegt)
 
 ## Beispiele
 
@@ -98,7 +127,8 @@ yt-transcript "https://youtu.be/dQw4w9WgXcQ" --output-dir "output" --overwrite y
 
 ## Ausgabe
 
-Dateien werden im durch `--output-dir` angegebenen Verzeichnis gespeichert.
+Dateien werden im durch `--output-dir` angegebenen Verzeichnis gespeichert (CLI).
+In der WebUI ist das Standardziel `output/`.
 
 Naming-Schema:
 
@@ -216,6 +246,17 @@ Platzhalter in `prompt_chunks.md`:
 - `{{CHUNK_TEXT}}`
 
 ## Versionsverlauf
+
+- **0.6**
+  - Neue Flet-WebUI (`yt-transcript-web`) ergänzt
+  - Dual-Mode-Architektur: gemeinsame Pipeline für CLI und WebUI
+  - Moderner, responsiver UI-Flow für Desktop und Mobile
+  - 3-stufiger Theme-Switch (System/Light/Dark)
+  - Kompaktes Logging mit Fortschrittsanzeige
+  - Overwrite-Toggle in der WebUI
+  - Summary-Preview direkt in der WebUI (Markdown)
+  - WebUI speichert standardmäßig in `output/` (auto-create)
+
 
 - **0.5**
   - Textbasiertes Chunking für lange Transkripte implementiert (Whisper-kompatibel)
