@@ -14,3 +14,4 @@ wheels/
 # Others
 output/
 .cache
+.DS_Store
