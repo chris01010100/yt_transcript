@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import queue
 import re
@@ -87,6 +88,8 @@ async def app_main(page: ft.Page) -> None:
     result_path_value = ""
     output_dir = Path("output")
     last_summary_path: Path | None = None
+    pending_download_bytes: bytes | None = None
+    pending_download_requires_local_write = False
 
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
 
@@ -220,6 +223,37 @@ async def app_main(page: ft.Page) -> None:
     run_button = ft.FilledButton(content="Start")
     reset_button = ft.OutlinedButton(content="Reset")
     reload_button = ft.OutlinedButton(content="Reload latest")
+    download_button = ft.OutlinedButton(content="Download Markdown", disabled=True)
+    copy_button = ft.OutlinedButton(content="Copy to clipboard", disabled=True)
+
+    def on_file_picker_result(e: Any) -> None:
+        nonlocal pending_download_bytes, pending_download_requires_local_write
+        try:
+            if not pending_download_requires_local_write:
+                return
+
+            target_path = cast(str | None, getattr(e, "path", None))
+            if not target_path:
+                show_snack("Save canceled.")
+                return
+
+            if pending_download_bytes is None:
+                show_snack("No markdown content prepared for download.")
+                return
+
+            Path(target_path).write_bytes(pending_download_bytes)
+            show_snack(f"Saved: {target_path}")
+        except Exception as exc:  # noqa: BLE001
+            show_snack(f"Could not save file: {exc}")
+        finally:
+            pending_download_bytes = None
+            pending_download_requires_local_write = False
+
+    file_picker = ft.FilePicker()
+    file_picker_has_result_handler = hasattr(file_picker, "on_result")
+    if file_picker_has_result_handler:
+        setattr(file_picker, "on_result", on_file_picker_result)
+    page.overlay.append(file_picker)
 
     def apply_markdown_theme() -> None:
         dark_ui = (theme_dropdown.value or "system") == "dark"
@@ -287,6 +321,12 @@ async def app_main(page: ft.Page) -> None:
             return 900
         return None
 
+    def update_summary_actions_state() -> None:
+        has_file = last_summary_path is not None and last_summary_path.exists()
+        has_summary = bool((summary_value or "").strip())
+        download_button.disabled = not has_file
+        copy_button.disabled = not has_summary
+
     def selected_languages() -> list[str]:
         langs: list[str] = []
         if lang_de.value:
@@ -327,6 +367,7 @@ async def app_main(page: ft.Page) -> None:
         summary_saved_path.value = (
             f"Gespeichert unter: {result_path_value}" if result_path_value else ""
         )
+        update_summary_actions_state()
 
     def load_summary_from_path(path: Path) -> bool:
         nonlocal summary_value, result_path_value, last_summary_path
@@ -445,7 +486,12 @@ async def app_main(page: ft.Page) -> None:
         page.update()
 
     async def on_reset(_: Any) -> None:
-        nonlocal summary_value, result_path_value, last_summary_path
+        nonlocal \
+            summary_value, \
+            result_path_value, \
+            last_summary_path, \
+            pending_download_bytes, \
+            pending_download_requires_local_write
         if is_running:
             return
         youtube_url.value = ""
@@ -465,6 +511,8 @@ async def app_main(page: ft.Page) -> None:
         summary_value = ""
         result_path_value = ""
         last_summary_path = None
+        pending_download_bytes = None
+        pending_download_requires_local_write = False
         rebuild_summary()
         update_provider_visibility()
         page.update()
@@ -557,11 +605,82 @@ async def app_main(page: ft.Page) -> None:
         if load_latest_summary(show_message=True):
             page.update()
 
+    async def on_download(_: Any) -> None:
+        nonlocal pending_download_bytes, pending_download_requires_local_write
+        if not last_summary_path or not last_summary_path.exists():
+            show_snack("No generated markdown file available.")
+            return
+
+        try:
+            pending_download_bytes = last_summary_path.read_bytes()
+        except Exception as exc:  # noqa: BLE001
+            show_snack(f"Could not read markdown file: {exc}")
+            return
+
+        kwargs: dict[str, Any] = {
+            "file_name": last_summary_path.name,
+        }
+
+        try:
+            sig = inspect.signature(file_picker.save_file)
+            supports_bytes = False
+            for key in ("src_bytes", "file_bytes", "data", "bytes"):
+                if key in sig.parameters:
+                    kwargs[key] = pending_download_bytes
+                    supports_bytes = True
+                    break
+
+            pending_download_requires_local_write = not supports_bytes
+
+            if (
+                pending_download_requires_local_write
+                and not file_picker_has_result_handler
+            ):
+                pending_download_bytes = None
+                pending_download_requires_local_write = False
+                show_snack(
+                    "Save dialog callback is not supported in this runtime/version."
+                )
+                return
+
+            result = file_picker.save_file(**kwargs)
+            if inspect.isawaitable(result):
+                await cast(Any, result)
+
+            if supports_bytes:
+                show_snack("Download started.")
+                pending_download_bytes = None
+                pending_download_requires_local_write = False
+        except Exception as exc:  # noqa: BLE001
+            pending_download_bytes = None
+            pending_download_requires_local_write = False
+            show_snack(f"Could not start download: {exc}")
+
+    async def on_copy(_: Any) -> None:
+        if not (summary_value or "").strip():
+            show_snack("No markdown content available.")
+            return
+
+        set_clipboard_fn = getattr(page, "set_clipboard", None)
+        if set_clipboard_fn is None:
+            show_snack("Clipboard is not supported in this runtime.")
+            return
+
+        try:
+            result = set_clipboard_fn(summary_value)
+            if inspect.isawaitable(result):
+                await cast(Any, result)
+            show_snack("Copied to clipboard.")
+        except Exception as exc:  # noqa: BLE001
+            show_snack(f"Could not copy to clipboard: {exc}")
+
     theme_dropdown.on_select = lambda e: asyncio.create_task(on_theme_change(e))
     provider.on_select = lambda e: asyncio.create_task(on_provider_change(e))
     run_button.on_click = lambda e: asyncio.create_task(on_run(e))
     reset_button.on_click = lambda e: asyncio.create_task(on_reset(e))
     reload_button.on_click = lambda e: asyncio.create_task(on_reload(e))
+    download_button.on_click = lambda e: asyncio.create_task(on_download(e))
+    copy_button.on_click = lambda e: asyncio.create_task(on_copy(e))
 
     def resize_handler(e: Any) -> None:
         asyncio.create_task(on_page_resized(e))
@@ -659,7 +778,15 @@ async def app_main(page: ft.Page) -> None:
                 controls=[
                     ft.Row(
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        controls=[summary_title, reload_button],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            summary_title,
+                            ft.Row(
+                                spacing=8,
+                                wrap=True,
+                                controls=[reload_button, download_button, copy_button],
+                            ),
+                        ],
                     ),
                     summary_saved_path,
                     summary_preview_container,

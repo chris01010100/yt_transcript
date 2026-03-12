@@ -247,6 +247,15 @@ Platzhalter in `prompt_chunks.md`:
 
 ## Versionsverlauf
 
+- **0.6.2**
+  - Summary-Action-Buttons in der WebUI erweitert
+  - Neuer Button **Download Markdown**: lädt die generierte Markdown-Datei 1:1 herunter
+  - Dateiname wird aus der aktuell erzeugten Summary-Datei übernommen
+  - Download-Flow robust für unterschiedliche Flet-Laufzeiten (Bytes-Support/Fallback)
+  - Neuer Button **Copy to clipboard** ergänzt (wenn Runtime unterstützt)
+  - Buttons sind nur aktiv, wenn eine Summary/Datei verfügbar ist
+  - Kompatibilitätsanpassungen für Pylance/Flet-API-Unterschiede (`FilePicker`, Clipboard)
+
 - **0.6.1**
   - WebUI-Preview deutlich verbessert: Markdown-Dokumentansicht statt Rohtext
   - `ft.Markdown`-Rendering erweitert (`selectable`, GitHub-Extensions, verbessertes Styling)
