@@ -90,7 +90,6 @@ async def app_main(page: ft.Page) -> None:
     last_summary_path: Path | None = None
     pending_download_bytes: bytes | None = None
     pending_download_requires_local_write = False
-    file_picker_registered = False
 
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
 
@@ -254,29 +253,7 @@ async def app_main(page: ft.Page) -> None:
     file_picker_has_result_handler = hasattr(file_picker, "on_result")
     if file_picker_has_result_handler:
         setattr(file_picker, "on_result", on_file_picker_result)
-
-    def register_file_picker() -> None:
-        nonlocal file_picker_registered
-
-        services = getattr(page, "services", None)
-        if services is not None:
-            try:
-                services.append(file_picker)
-                file_picker_registered = True
-                return
-            except Exception:  # noqa: BLE001
-                pass
-
-        overlay = getattr(page, "overlay", None)
-        if overlay is not None:
-            try:
-                overlay.append(file_picker)
-                file_picker_registered = True
-                return
-            except Exception:  # noqa: BLE001
-                pass
-
-        file_picker_registered = False
+    page.overlay.append(file_picker)
 
     def apply_markdown_theme() -> None:
         dark_ui = (theme_dropdown.value or "system") == "dark"
@@ -347,7 +324,7 @@ async def app_main(page: ft.Page) -> None:
     def update_summary_actions_state() -> None:
         has_file = last_summary_path is not None and last_summary_path.exists()
         has_summary = bool((summary_value or "").strip())
-        download_button.disabled = (not has_file) or (not file_picker_registered)
+        download_button.disabled = not has_file
         copy_button.disabled = not has_summary
 
     def selected_languages() -> list[str]:
@@ -630,10 +607,6 @@ async def app_main(page: ft.Page) -> None:
 
     async def on_download(_: Any) -> None:
         nonlocal pending_download_bytes, pending_download_requires_local_write
-        if not file_picker_registered:
-            show_snack("Download dialog is not supported in this runtime.")
-            return
-
         if not last_summary_path or not last_summary_path.exists():
             show_snack("No generated markdown file available.")
             return
@@ -719,121 +692,127 @@ async def app_main(page: ft.Page) -> None:
     apply_markdown_theme()
     update_provider_visibility()
 
-    header_controls: list[ft.Control] = [
-        ft.Text("yt-transcript WebUI", size=24, weight=ft.FontWeight.BOLD),
-        theme_dropdown,
-    ]
     header = ft.Row(
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        controls=header_controls,
+        controls=[
+            ft.Text("yt-transcript WebUI", size=24, weight=ft.FontWeight.BOLD),
+            theme_dropdown,
+        ],
     )
 
-    provider_container = ft.Container(content=provider, col={"xs": 12, "md": 4})
-    model_container = ft.Container(content=model, col={"xs": 12, "md": 8})
+    input_card = ft.Card(
+        content=ft.Container(
+            padding=16,
+            content=ft.Column(
+                spacing=12,
+                controls=[
+                    ft.Text("Input", size=18, weight=ft.FontWeight.BOLD),
+                    youtube_url,
+                    ft.ResponsiveRow(
+                        controls=[
+                            ft.Container(provider, col={"xs": 12, "md": 4}),
+                            ft.Container(model, col={"xs": 12, "md": 8}),
+                        ]
+                    ),
+                    ft.Text("Sprachen", weight=ft.FontWeight.W_500),
+                    ft.Row(
+                        controls=[lang_de, lang_en, lang_fr, lang_es],
+                        wrap=True,
+                        spacing=10,
+                    ),
+                    ft.Row(
+                        controls=[summarize_checkbox, overwrite_switch],
+                        wrap=True,
+                        spacing=16,
+                    ),
+                    prompt_file,
+                    ollama_fields,
+                    ft.Row(
+                        controls=[run_button, reset_button, progress_ring],
+                        spacing=12,
+                    ),
+                    status_text,
+                    progress_text,
+                ],
+            ),
+        )
+    )
 
-    input_controls: list[ft.Control] = [
-        ft.Text("Input", size=18, weight=ft.FontWeight.BOLD),
-        youtube_url,
-        ft.ResponsiveRow(controls=[provider_container, model_container]),
-        ft.Text("Sprachen", weight=ft.FontWeight.W_500),
-        ft.Row(
-            controls=cast(list[ft.Control], [lang_de, lang_en, lang_fr, lang_es]),
-            wrap=True,
-            spacing=10,
+    log_card = ft.Card(
+        content=ft.Container(
+            padding=16,
+            content=ft.Column(
+                spacing=10,
+                controls=[
+                    ft.Text("Log", size=18, weight=ft.FontWeight.BOLD),
+                    log_list,
+                ],
+            ),
+        )
+    )
+
+    summary_content_container = ft.Container(
+        content=summary_md,
+        width=compute_summary_content_width(),
+    )
+
+    summary_preview_container = ft.Container(
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOWEST,
+        border_radius=10,
+        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        padding=ft.padding.symmetric(horizontal=14, vertical=12),
+        height=compute_summary_preview_height(),
+        content=ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[summary_content_container],
         ),
-        ft.Row(
-            controls=cast(list[ft.Control], [summarize_checkbox, overwrite_switch]),
-            wrap=True,
-            spacing=16,
-        ),
-        prompt_file,
-        ollama_fields,
-        ft.Row(
-            controls=cast(list[ft.Control], [run_button, reset_button, progress_ring]),
-            spacing=12,
-        ),
-        status_text,
-        progress_text,
-    ]
-    input_column = ft.Column(spacing=12, controls=input_controls)
-    input_container = ft.Container()
-    input_container.padding = 16
-    input_container.content = input_column
-    input_card = ft.Card()
-    input_card.content = input_container
-
-    log_controls: list[ft.Control] = [
-        ft.Text("Log", size=18, weight=ft.FontWeight.BOLD),
-        log_list,
-    ]
-    log_column = ft.Column(spacing=10, controls=log_controls)
-    log_container = ft.Container()
-    log_container.padding = 16
-    log_container.content = log_column
-    log_card = ft.Card()
-    log_card.content = log_container
-
-    summary_content_container = ft.Container()
-    summary_content_container.content = summary_md
-    summary_content_container.width = compute_summary_content_width()
-
-    summary_preview_column = ft.Column(
-        scroll=ft.ScrollMode.AUTO,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        controls=cast(list[ft.Control], [summary_content_container]),
     )
-    summary_preview_container = ft.Container()
-    summary_preview_container.bgcolor = ft.Colors.SURFACE_CONTAINER_LOWEST
-    summary_preview_container.border_radius = 10
-    summary_preview_container.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
-    summary_preview_container.padding = ft.padding.symmetric(horizontal=14, vertical=12)
-    summary_preview_container.height = compute_summary_preview_height()
-    summary_preview_container.content = summary_preview_column
 
-    summary_actions_row = ft.Row(
-        spacing=8,
-        wrap=True,
-        controls=cast(list[ft.Control], [reload_button, download_button, copy_button]),
+    summary_card = ft.Card(
+        content=ft.Container(
+            padding=16,
+            content=ft.Column(
+                spacing=12,
+                controls=[
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            summary_title,
+                            ft.Row(
+                                spacing=8,
+                                wrap=True,
+                                controls=[reload_button, download_button, copy_button],
+                            ),
+                        ],
+                    ),
+                    summary_saved_path,
+                    summary_preview_container,
+                ],
+            ),
+        )
     )
-    summary_header_row = ft.Row(
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        controls=cast(list[ft.Control], [summary_title, summary_actions_row]),
-    )
-    summary_controls: list[ft.Control] = [
-        summary_header_row,
-        summary_saved_path,
-        summary_preview_container,
-    ]
-    summary_column = ft.Column(spacing=12, controls=summary_controls)
-    summary_container = ft.Container()
-    summary_container.padding = 16
-    summary_container.content = summary_column
-    summary_card = ft.Card()
-    summary_card.content = summary_container
 
     left_column = ft.Column(
         expand=True,
         spacing=12,
-        controls=cast(list[ft.Control], [input_card, log_card]),
+        controls=[input_card, log_card],
     )
     right_column = ft.Column(
         expand=True,
         spacing=12,
-        controls=cast(list[ft.Control], [summary_card]),
+        controls=[summary_card],
     )
 
-    left_col_container = ft.Container(content=left_column, col={"xs": 12, "md": 6})
-    right_col_container = ft.Container(content=right_column, col={"xs": 12, "md": 6})
     content = ft.ResponsiveRow(
-        controls=cast(list[ft.Control], [left_col_container, right_col_container]),
+        controls=[
+            ft.Container(left_column, col={"xs": 12, "md": 6}),
+            ft.Container(right_column, col={"xs": 12, "md": 6}),
+        ],
         run_spacing=12,
     )
-
-    register_file_picker()
-    if not file_picker_registered:
-        add_log_line("Warning: FilePicker is not supported by this client/runtime.")
 
     page.add(header, content)
     load_latest_summary(show_message=False)
