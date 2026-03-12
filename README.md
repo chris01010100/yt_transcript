@@ -247,6 +247,13 @@ Platzhalter in `prompt_chunks.md`:
 
 ## Versionsverlauf
 
+- **0.6.3**
+  - WebUI-Kompatibilität für strikte Pylance-Stub-Prüfung verbessert
+  - UI-Control-Aufbau in `webui.py` typkompatibel refaktoriert (`Card`/`Container`/`controls`)
+  - Robuste FilePicker-Registrierung für unterschiedliche Flet-Runtimes ergänzt (`services` mit `overlay`-Fallback)
+  - Download-Button-Status an tatsächliche FilePicker-Verfügbarkeit gekoppelt
+  - Fehler "unknown control: FilePicker" in WebUI-Startsequenz behoben
+
 - **0.6.2**
   - Summary-Action-Buttons in der WebUI erweitert
   - Neuer Button **Download Markdown**: lädt die generierte Markdown-Datei 1:1 herunter
