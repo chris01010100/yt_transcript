@@ -247,6 +247,16 @@ Platzhalter in `prompt_chunks.md`:
 
 ## Versionsverlauf
 
+- **0.6.1**
+  - WebUI-Preview deutlich verbessert: Markdown-Dokumentansicht statt Rohtext
+  - `ft.Markdown`-Rendering erweitert (`selectable`, GitHub-Extensions, verbessertes Styling)
+  - Verbesserte Lesbarkeit von Überschriften, Listen, Links, Codeblöcken und Blockquotes
+  - Adaptive Code-Themes für Light/Dark ergänzt
+  - Summary wird in der WebUI aus der zuletzt gespeicherten Markdown-Datei geladen
+  - Reload-Button ergänzt (lädt zuletzt gespeicherte Summary inkl. Pfadanzeige)
+  - Responsive Preview-Layout optimiert (Desktop + iPhone)
+  - Maximalbreite für Markdown-Inhalt auf großen Displays ergänzt
+
 - **0.6**
   - Neue Flet-WebUI (`yt-transcript-web`) ergänzt
   - Dual-Mode-Architektur: gemeinsame Pipeline für CLI und WebUI

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import queue
+import re
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -30,6 +31,41 @@ def _stage_label(stage: str) -> str:
     return stage
 
 
+def _extract_summary_path(path_value: str) -> Path | None:
+    raw = (path_value or "").strip()
+    if not raw:
+        return None
+
+    marker = "Gespeichert unter:"
+    if marker in raw:
+        raw = raw.split(marker, 1)[1].strip()
+
+    match = re.search(r"(output/.*\.md)$", raw)
+    if match:
+        raw = match.group(1)
+
+    candidate = Path(raw)
+    if candidate.exists():
+        return candidate
+
+    return None
+
+
+def _find_latest_summary_file(output_dir: Path) -> Path | None:
+    if not output_dir.exists() or not output_dir.is_dir():
+        return None
+
+    candidates = [p for p in output_dir.glob("*.md") if p.is_file()]
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def _read_markdown_file(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
 def main() -> None:
     host = os.environ.get("YT_TRANSCRIPT_WEB_HOST", "0.0.0.0")
     port = int(os.environ.get("YT_TRANSCRIPT_WEB_PORT", "8550"))
@@ -49,6 +85,8 @@ async def app_main(page: ft.Page) -> None:
     current_status = "Idle"
     summary_value = ""
     result_path_value = ""
+    output_dir = Path("output")
+    last_summary_path: Path | None = None
 
     event_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
 
@@ -132,14 +170,122 @@ async def app_main(page: ft.Page) -> None:
     # --- Summary ---
     summary_title = ft.Text("Summary", size=18, weight=ft.FontWeight.BOLD)
     summary_saved_path = ft.Text("", selectable=True, size=12)
+
+    async def on_summary_link_tap(e: Any) -> None:
+        url = (getattr(e, "data", None) or "").strip()
+        if not url:
+            return
+        await page.launch_url(url)
+
     summary_md = ft.Markdown(
         value="Noch keine Zusammenfassung vorhanden.",
         selectable=True,
         extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+        code_theme=ft.MarkdownCodeTheme.A11Y_LIGHT,
+        md_style_sheet=ft.MarkdownStyleSheet(
+            block_spacing=10,
+            p_text_style=ft.TextStyle(size=15, height=1.5),
+            h1_text_style=ft.TextStyle(size=30, weight=ft.FontWeight.BOLD),
+            h2_text_style=ft.TextStyle(size=24, weight=ft.FontWeight.BOLD),
+            h3_text_style=ft.TextStyle(size=20, weight=ft.FontWeight.BOLD),
+            h4_text_style=ft.TextStyle(size=17, weight=ft.FontWeight.W_600),
+            a_text_style=ft.TextStyle(
+                color=ft.Colors.BLUE_700,
+                decoration=ft.TextDecoration.UNDERLINE,
+            ),
+            code_text_style=ft.TextStyle(
+                font_family="monospace",
+                bgcolor=ft.Colors.BLUE_GREY_50,
+            ),
+            codeblock_padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            codeblock_decoration=ft.BoxDecoration(
+                bgcolor=ft.Colors.BLUE_GREY_50,
+                border_radius=8,
+            ),
+            blockquote_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            blockquote_decoration=ft.BoxDecoration(
+                bgcolor=ft.Colors.BLUE_GREY_50,
+                border=ft.border.only(
+                    left=ft.BorderSide(width=3, color=ft.Colors.INDIGO_300)
+                ),
+                border_radius=6,
+            ),
+        ),
+        code_style_sheet=ft.MarkdownStyleSheet(
+            p_text_style=ft.TextStyle(size=14, font_family="monospace", height=1.45),
+        ),
+        on_tap_link=lambda e: asyncio.create_task(on_summary_link_tap(e)),
     )
 
     run_button = ft.FilledButton(content="Start")
     reset_button = ft.OutlinedButton(content="Reset")
+    reload_button = ft.OutlinedButton(content="Reload latest")
+
+    def apply_markdown_theme() -> None:
+        dark_ui = (theme_dropdown.value or "system") == "dark"
+
+        summary_md.code_theme = (
+            ft.MarkdownCodeTheme.A11Y_DARK
+            if dark_ui
+            else ft.MarkdownCodeTheme.A11Y_LIGHT
+        )
+
+        summary_md.md_style_sheet = ft.MarkdownStyleSheet(
+            block_spacing=10,
+            p_text_style=ft.TextStyle(size=15, height=1.5),
+            h1_text_style=ft.TextStyle(size=30, weight=ft.FontWeight.BOLD),
+            h2_text_style=ft.TextStyle(size=24, weight=ft.FontWeight.BOLD),
+            h3_text_style=ft.TextStyle(size=20, weight=ft.FontWeight.BOLD),
+            h4_text_style=ft.TextStyle(size=17, weight=ft.FontWeight.W_600),
+            a_text_style=ft.TextStyle(
+                color=(ft.Colors.BLUE_200 if dark_ui else ft.Colors.BLUE_700),
+                decoration=ft.TextDecoration.UNDERLINE,
+            ),
+            code_text_style=ft.TextStyle(
+                font_family="monospace",
+                bgcolor=(
+                    ft.Colors.BLUE_GREY_900 if dark_ui else ft.Colors.BLUE_GREY_50
+                ),
+            ),
+            codeblock_padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            codeblock_decoration=ft.BoxDecoration(
+                bgcolor=(
+                    ft.Colors.BLUE_GREY_900 if dark_ui else ft.Colors.BLUE_GREY_50
+                ),
+                border_radius=8,
+            ),
+            blockquote_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            blockquote_decoration=ft.BoxDecoration(
+                bgcolor=(
+                    ft.Colors.BLUE_GREY_900 if dark_ui else ft.Colors.BLUE_GREY_50
+                ),
+                border=ft.border.only(
+                    left=ft.BorderSide(
+                        width=3,
+                        color=(
+                            ft.Colors.INDIGO_200 if dark_ui else ft.Colors.INDIGO_300
+                        ),
+                    )
+                ),
+                border_radius=6,
+            ),
+        )
+
+    def compute_summary_preview_height() -> int:
+        width = page.width or 390
+        height = page.height or 844
+
+        if width < 500:  # iPhone / small mobile
+            return max(300, int(height * 0.42))
+        if width < 900:  # tablets / small laptops
+            return max(380, int(height * 0.5))
+        return max(460, int(height * 0.62))
+
+    def compute_summary_content_width() -> int | None:
+        width = page.width or 390
+        if width >= 1200:
+            return 900
+        return None
 
     def selected_languages() -> list[str]:
         langs: list[str] = []
@@ -182,6 +328,27 @@ async def app_main(page: ft.Page) -> None:
             f"Gespeichert unter: {result_path_value}" if result_path_value else ""
         )
 
+    def load_summary_from_path(path: Path) -> bool:
+        nonlocal summary_value, result_path_value, last_summary_path
+        try:
+            summary_value = _read_markdown_file(path)
+        except Exception as exc:  # noqa: BLE001
+            show_snack(f"Konnte Markdown nicht laden: {exc}")
+            return False
+
+        result_path_value = str(path)
+        last_summary_path = path
+        rebuild_summary()
+        return True
+
+    def load_latest_summary(show_message: bool = False) -> bool:
+        latest = _find_latest_summary_file(output_dir)
+        if latest is None:
+            if show_message:
+                show_snack("Keine Markdown-Datei in output/ gefunden.")
+            return False
+        return load_summary_from_path(latest)
+
     def update_provider_visibility() -> None:
         ollama_fields.visible = provider.value == "ollama"
 
@@ -210,6 +377,9 @@ async def app_main(page: ft.Page) -> None:
                         summary_value = str(payload)
                     elif kind == "result_path":
                         result_path_value = str(payload)
+                        extracted = _extract_summary_path(result_path_value)
+                        if extracted is not None:
+                            load_summary_from_path(extracted)
                     elif kind == "error":
                         add_log_line(f"Error: {payload}")
                     elif kind == "status":
@@ -243,6 +413,9 @@ async def app_main(page: ft.Page) -> None:
                             summary_value = str(payload)
                         elif kind == "result_path":
                             result_path_value = str(payload)
+                            extracted = _extract_summary_path(result_path_value)
+                            if extracted is not None:
+                                load_summary_from_path(extracted)
                         elif kind == "error":
                             add_log_line(f"Error: {payload}")
                         elif kind == "status":
@@ -259,13 +432,20 @@ async def app_main(page: ft.Page) -> None:
     async def on_theme_change(_: Any) -> None:
         choice = cast(ThemeChoice, theme_dropdown.value or "system")
         page.theme_mode = _theme_mode_from_choice(choice)
+        apply_markdown_theme()
         page.update()
 
     async def on_provider_change(_: Any) -> None:
         update_provider_visibility()
         page.update()
 
+    async def on_page_resized(_: Any) -> None:
+        summary_preview_container.height = compute_summary_preview_height()
+        summary_content_container.width = compute_summary_content_width()
+        page.update()
+
     async def on_reset(_: Any) -> None:
+        nonlocal summary_value, result_path_value, last_summary_path
         if is_running:
             return
         youtube_url.value = ""
@@ -282,6 +462,10 @@ async def app_main(page: ft.Page) -> None:
         log_list.controls.clear()
         status_text.value = "Status: Idle"
         progress_text.value = "Progress: -"
+        summary_value = ""
+        result_path_value = ""
+        last_summary_path = None
+        rebuild_summary()
         update_provider_visibility()
         page.update()
 
@@ -311,7 +495,6 @@ async def app_main(page: ft.Page) -> None:
         update_provider_visibility()
         page.update()
 
-        output_dir = Path("output")
         config = PipelineConfig(
             youtube_url=(youtube_url.value or "").strip(),
             languages=selected_languages(),
@@ -366,11 +549,28 @@ async def app_main(page: ft.Page) -> None:
         update_provider_visibility()
         page.update()
 
+    async def on_reload(_: Any) -> None:
+        if last_summary_path and last_summary_path.exists():
+            load_summary_from_path(last_summary_path)
+            page.update()
+            return
+        if load_latest_summary(show_message=True):
+            page.update()
+
     theme_dropdown.on_select = lambda e: asyncio.create_task(on_theme_change(e))
     provider.on_select = lambda e: asyncio.create_task(on_provider_change(e))
     run_button.on_click = lambda e: asyncio.create_task(on_run(e))
     reset_button.on_click = lambda e: asyncio.create_task(on_reset(e))
+    reload_button.on_click = lambda e: asyncio.create_task(on_reload(e))
 
+    def resize_handler(e: Any) -> None:
+        asyncio.create_task(on_page_resized(e))
+
+    if hasattr(page, "on_resize"):
+        setattr(page, "on_resize", resize_handler)
+    elif hasattr(page, "on_resized"):
+        setattr(page, "on_resized", resize_handler)
+    apply_markdown_theme()
     update_provider_visibility()
 
     header = ft.Row(
@@ -433,18 +633,36 @@ async def app_main(page: ft.Page) -> None:
         )
     )
 
+    summary_content_container = ft.Container(
+        content=summary_md,
+        width=compute_summary_content_width(),
+    )
+
+    summary_preview_container = ft.Container(
+        bgcolor=ft.Colors.SURFACE_CONTAINER_LOWEST,
+        border_radius=10,
+        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        padding=ft.padding.symmetric(horizontal=14, vertical=12),
+        height=compute_summary_preview_height(),
+        content=ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[summary_content_container],
+        ),
+    )
+
     summary_card = ft.Card(
         content=ft.Container(
             padding=16,
             content=ft.Column(
-                spacing=10,
+                spacing=12,
                 controls=[
-                    summary_title,
-                    summary_saved_path,
-                    ft.Container(
-                        content=summary_md,
-                        expand=True,
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[summary_title, reload_button],
                     ),
+                    summary_saved_path,
+                    summary_preview_container,
                 ],
             ),
         )
@@ -470,4 +688,5 @@ async def app_main(page: ft.Page) -> None:
     )
 
     page.add(header, content)
+    load_latest_summary(show_message=False)
     page.update()
