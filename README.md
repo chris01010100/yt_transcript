@@ -247,6 +247,15 @@ Platzhalter in `prompt_chunks.md`:
 
 ## Versionsverlauf
 
+- **0.7.0**
+  - Serverseitige Persistenz für WebUI-Einstellungen ergänzt (`~/.yt_transcript/settings.json`)
+  - Serverseitige, geschützte API-Key-Persistenz ergänzt (`~/.yt_transcript/secrets.json`, Modus 600)
+  - Neue Store-Module: `settings_store.py` und `secrets_store.py`
+  - WebUI lädt gespeicherte LLM-Parameter beim Start automatisch (Endpoint, Modell, Temperature, Max tokens)
+  - Maskiertes OpenRouter-API-Key-Feld in der WebUI ergänzt; Änderungen überschreiben den alten Key
+  - OpenRouter-Request-Konfiguration erweitert (konfigurierbarer Endpoint, `temperature`, `max_tokens`)
+  - Pipeline/Router erweitert, damit die gespeicherten Werte im Lauf tatsächlich verwendet werden
+
 - **0.6.3**
   - WebUI-Kompatibilität für strikte Pylance-Stub-Prüfung verbessert
   - UI-Control-Aufbau in `webui.py` typkompatibel refaktoriert (`Card`/`Container`/`controls`)

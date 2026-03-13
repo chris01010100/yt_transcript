@@ -20,6 +20,9 @@ def chat_completion(
     api_key: str | None = None,
     site_url: str | None = None,
     site_name: str | None = None,
+    api_url: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
     timeout: float = 120.0,
 ) -> str:
     """Send a chat completion request to OpenRouter.
@@ -58,9 +61,16 @@ def chat_completion(
         "messages": messages,
     }
 
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+
     try:
         with httpx.Client(timeout=timeout) as client:
-            response = client.post(OPENROUTER_API_URL, headers=headers, json=payload)
+            response = client.post(
+                api_url or OPENROUTER_API_URL, headers=headers, json=payload
+            )
             response.raise_for_status()
     except httpx.TimeoutException as exc:
         raise OpenRouterError(f"OpenRouter API request timed out: {exc}") from exc
@@ -75,4 +85,6 @@ def chat_completion(
         data = response.json()
         return data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise OpenRouterError(f"Unexpected OpenRouter API response format: {exc}") from exc
+        raise OpenRouterError(
+            f"Unexpected OpenRouter API response format: {exc}"
+        ) from exc

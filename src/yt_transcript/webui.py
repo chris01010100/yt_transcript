@@ -11,6 +11,8 @@ from typing import Any, Literal, cast
 import flet as ft
 
 from .pipeline import PipelineConfig, run_pipeline
+from .secrets_store import get_api_key, set_api_key
+from .settings_store import DEFAULT_SETTINGS, load_settings, save_settings
 
 
 ThemeChoice = Literal["system", "light", "dark"]
@@ -99,6 +101,37 @@ async def app_main(page: ft.Page) -> None:
         page.overlay.append(snack)
         page.update()
 
+    try:
+        stored_settings = load_settings()
+    except Exception:  # noqa: BLE001
+        stored_settings = dict(DEFAULT_SETTINGS)
+
+    default_llm_endpoint = str(
+        stored_settings.get("llm_endpoint", DEFAULT_SETTINGS["llm_endpoint"])
+    )
+    default_llm_model = str(
+        stored_settings.get("llm_model", DEFAULT_SETTINGS["llm_model"])
+    )
+
+    try:
+        default_temperature = float(
+            stored_settings.get("temperature", DEFAULT_SETTINGS["temperature"])
+        )
+    except (TypeError, ValueError):
+        default_temperature = float(DEFAULT_SETTINGS["temperature"])
+
+    try:
+        default_max_tokens = int(
+            stored_settings.get("max_tokens", DEFAULT_SETTINGS["max_tokens"])
+        )
+    except (TypeError, ValueError):
+        default_max_tokens = int(DEFAULT_SETTINGS["max_tokens"])
+
+    try:
+        stored_openrouter_key = get_api_key("openrouter") or ""
+    except Exception:  # noqa: BLE001
+        stored_openrouter_key = ""
+
     # --- Header / Theme ---
     theme_dropdown = ft.Dropdown(
         label="Theme",
@@ -129,6 +162,30 @@ async def app_main(page: ft.Page) -> None:
     model = ft.TextField(
         label="Model",
         hint_text="openai/gpt-4o-mini oder qwen2.5:3b",
+        value=default_llm_model,
+        expand=True,
+    )
+
+    openrouter_endpoint = ft.TextField(
+        label="OpenRouter endpoint",
+        value=default_llm_endpoint,
+        expand=True,
+    )
+    temperature_field = ft.TextField(
+        label="Temperature",
+        value=str(default_temperature),
+        width=160,
+    )
+    max_tokens_field = ft.TextField(
+        label="Max tokens",
+        value=str(default_max_tokens),
+        width=180,
+    )
+    openrouter_api_key = ft.TextField(
+        label="OpenRouter API Key",
+        value=stored_openrouter_key,
+        password=True,
+        can_reveal_password=True,
         expand=True,
     )
 
@@ -150,6 +207,20 @@ async def app_main(page: ft.Page) -> None:
         label="Ollama generate path",
         value="/api/generate",
         expand=True,
+    )
+
+    openrouter_fields = ft.Column(
+        controls=[
+            openrouter_endpoint,
+            ft.Row(
+                controls=cast(list[ft.Control], [temperature_field, max_tokens_field]),
+                wrap=True,
+                spacing=10,
+            ),
+            openrouter_api_key,
+        ],
+        spacing=10,
+        visible=True,
     )
 
     ollama_fields = ft.Column(
@@ -369,6 +440,10 @@ async def app_main(page: ft.Page) -> None:
         youtube_url.disabled = running
         provider.disabled = running
         model.disabled = running
+        openrouter_endpoint.disabled = running
+        temperature_field.disabled = running
+        max_tokens_field.disabled = running
+        openrouter_api_key.disabled = running
         lang_de.disabled = running
         lang_en.disabled = running
         lang_fr.disabled = running
@@ -413,7 +488,41 @@ async def app_main(page: ft.Page) -> None:
             return False
         return load_summary_from_path(latest)
 
+    def _current_settings_payload() -> dict[str, Any]:
+        return {
+            "llm_endpoint": (openrouter_endpoint.value or "").strip(),
+            "llm_model": (model.value or "").strip(),
+            "temperature": (temperature_field.value or "").strip(),
+            "max_tokens": (max_tokens_field.value or "").strip(),
+        }
+
+    def persist_settings_safely() -> None:
+        try:
+            save_settings(_current_settings_payload())
+        except Exception:  # noqa: BLE001
+            add_log_line("Warning: Could not persist settings to server storage.")
+
+    def persist_openrouter_key_safely() -> None:
+        try:
+            set_api_key("openrouter", (openrouter_api_key.value or "").strip())
+        except Exception:  # noqa: BLE001
+            add_log_line("Warning: Could not persist OpenRouter API key.")
+
+    def parse_temperature_or_default() -> float:
+        try:
+            return float((temperature_field.value or "").strip())
+        except (TypeError, ValueError):
+            return default_temperature
+
+    def parse_max_tokens_or_default() -> int:
+        try:
+            return int((max_tokens_field.value or "").strip())
+        except (TypeError, ValueError):
+            return default_max_tokens
+
     def update_provider_visibility() -> None:
+        is_openrouter = provider.value == "openrouter"
+        openrouter_fields.visible = is_openrouter
         ollama_fields.visible = provider.value == "ollama"
 
     async def drain_events_until_done(done_marker: asyncio.Event) -> None:
@@ -500,6 +609,7 @@ async def app_main(page: ft.Page) -> None:
         page.update()
 
     async def on_provider_change(_: Any) -> None:
+        persist_settings_safely()
         update_provider_visibility()
         page.update()
 
@@ -519,7 +629,10 @@ async def app_main(page: ft.Page) -> None:
             return
         youtube_url.value = ""
         provider.value = "openrouter"
-        model.value = ""
+        model.value = str(DEFAULT_SETTINGS["llm_model"])
+        openrouter_endpoint.value = str(DEFAULT_SETTINGS["llm_endpoint"])
+        temperature_field.value = str(DEFAULT_SETTINGS["temperature"])
+        max_tokens_field.value = str(DEFAULT_SETTINGS["max_tokens"])
         lang_de.value = True
         lang_en.value = True
         lang_fr.value = False
@@ -536,6 +649,8 @@ async def app_main(page: ft.Page) -> None:
         last_summary_path = None
         pending_download_bytes = None
         pending_download_requires_local_write = False
+        persist_settings_safely()
+        persist_openrouter_key_safely()
         rebuild_summary()
         update_provider_visibility()
         page.update()
@@ -566,6 +681,9 @@ async def app_main(page: ft.Page) -> None:
         update_provider_visibility()
         page.update()
 
+        persist_settings_safely()
+        persist_openrouter_key_safely()
+
         config = PipelineConfig(
             youtube_url=(youtube_url.value or "").strip(),
             languages=selected_languages(),
@@ -586,6 +704,10 @@ async def app_main(page: ft.Page) -> None:
             chunk_overlap_chars=1000,
             chunk_max_chunks=0,
             chunk_cache_dir=Path(".cache/yt-transcript"),
+            openrouter_api_key=(openrouter_api_key.value or "").strip() or None,
+            openrouter_api_url=(openrouter_endpoint.value or "").strip() or None,
+            temperature=parse_temperature_or_default(),
+            max_tokens=parse_max_tokens_or_default(),
         )
 
         done = asyncio.Event()
@@ -703,6 +825,11 @@ async def app_main(page: ft.Page) -> None:
 
     theme_dropdown.on_select = lambda e: asyncio.create_task(on_theme_change(e))
     provider.on_select = lambda e: asyncio.create_task(on_provider_change(e))
+    model.on_change = lambda _: persist_settings_safely()
+    openrouter_endpoint.on_change = lambda _: persist_settings_safely()
+    temperature_field.on_change = lambda _: persist_settings_safely()
+    max_tokens_field.on_change = lambda _: persist_settings_safely()
+    openrouter_api_key.on_change = lambda _: persist_openrouter_key_safely()
     run_button.on_click = lambda e: asyncio.create_task(on_run(e))
     reset_button.on_click = lambda e: asyncio.create_task(on_reset(e))
     reload_button.on_click = lambda e: asyncio.create_task(on_reload(e))
@@ -748,6 +875,7 @@ async def app_main(page: ft.Page) -> None:
             spacing=16,
         ),
         prompt_file,
+        openrouter_fields,
         ollama_fields,
         ft.Row(
             controls=cast(list[ft.Control], [run_button, reset_button, progress_ring]),

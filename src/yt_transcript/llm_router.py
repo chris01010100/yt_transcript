@@ -15,6 +15,10 @@ def summarize(
     timeout: float = 120.0,
     ollama_base_url: str = "http://localhost:11434",
     ollama_generate_path: str = "/api/generate",
+    openrouter_api_key: str | None = None,
+    openrouter_api_url: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     """Generate a summary using the selected provider."""
 
@@ -22,6 +26,10 @@ def summarize(
         return openrouter_chat_completion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
+            api_key=openrouter_api_key,
+            api_url=openrouter_api_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
             timeout=timeout,
         )
 

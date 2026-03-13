@@ -52,6 +52,10 @@ class PipelineConfig:
     chunk_overlap_chars: int
     chunk_max_chunks: int
     chunk_cache_dir: Path
+    openrouter_api_key: str | None = None
+    openrouter_api_url: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -285,6 +289,10 @@ def run_pipeline(
                 timeout=config.llm_timeout,
                 ollama_base_url=config.ollama_base_url,
                 ollama_generate_path=config.ollama_generate_path,
+                openrouter_api_key=config.openrouter_api_key,
+                openrouter_api_url=config.openrouter_api_url,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
             )
 
             save_chunk_summary(
@@ -327,6 +335,10 @@ def run_pipeline(
             timeout=config.llm_timeout,
             ollama_base_url=config.ollama_base_url,
             ollama_generate_path=config.ollama_generate_path,
+            openrouter_api_key=config.openrouter_api_key,
+            openrouter_api_url=config.openrouter_api_url,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
         )
         if progress:
             progress("final_summary", 1, 1)
