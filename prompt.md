@@ -20,8 +20,9 @@ Obsidian Properties:
 - source_url: <URL>
 - video_id: <VIDEO_ID>
 - language: de
-- model: <MODEL_NAME>
-- created_at: <ISO-8601 Datum Zeit>
+- llm_provider: <LLM_PROVIDER>
+- llm_model: <MODEL_NAME>
+- created_at: <YYYY-MM-DD>
 - tags: []
 ---
 
@@ -45,6 +46,7 @@ MARKDOWN-INHALT
 EINGABE
 URL: {{SOURCE_URL}}
 VIDEO_ID: {{VIDEO_ID}}
+LLM_PROVIDER: {{LLM_PROVIDER}}
 MODEL_NAME: {{MODEL_NAME}}
 
 TRANSCRIPT:

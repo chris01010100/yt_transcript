@@ -1,13 +1,13 @@
 # yt-transcript
 
-CLI- und WebUI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter oder Ollama zusammenfasst.
+CLI- und WebUI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Datei mit Zeitstempeln speichert und optional per OpenRouter, OpenAI oder Ollama zusammenfasst.
 
 ## Was macht das Tool?
 
 - Nimmt eine YouTube-URL entgegen und extrahiert daraus die **Video-ID**.
 - Ruft über [`youtube-transcript-api`](https://pypi.org/project/youtube-transcript-api/) das Transcript ab (bevorzugt **Deutsch**, sonst **Englisch**).
 - Schreibt das Transcript als Markdown in ein frei wählbares Ausgabeverzeichnis.
-- Optional: Erstellt eine ausführliche Zusammenfassung mit OpenRouter oder Ollama im selben Ausgabeverzeichnis.
+- Optional: Erstellt eine ausführliche Zusammenfassung mit OpenRouter, OpenAI oder Ollama im selben Ausgabeverzeichnis.
 - Unterstützt zwei Betriebsmodi: klassische **CLI** und moderne **WebUI (Flet)**.
 - Dateinamen basieren auf Videotitel + Video-ID und optional Veröffentlichungsdatum.
 - Für lange Transkripte: textbasiertes Chunking + Map/Reduce + Cache/Resume.
@@ -18,7 +18,9 @@ CLI- und WebUI-Tool, das YouTube-Untertitel/Transkripte abruft, als Markdown-Dat
 - Dependencies:
   - `youtube-transcript-api`
   - `httpx`
-- Für Zusammenfassungen: `OPENROUTER_API_KEY` als Umgebungsvariable
+- Für Zusammenfassungen (CLI):
+  - `OPENROUTER_API_KEY` (Provider `openrouter`)
+  - `OPENAI_API_KEY` (Provider `openai`)
 
 ## Installation
 
@@ -39,7 +41,7 @@ yt-transcript-web
 ## CLI Benutzung
 
 ```bash
-yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --provider <openrouter|ollama> --model <model_id>] [--llm-timeout <seconds>] [--chunk-max-chars <n>] [--chunk-overlap-chars <n>] [--chunk-max-chunks <n>] [--chunk-cache-dir <path>]
+yt-transcript <youtube_url> [--hh] [--lang <code> ...] [--output-dir <dir>] [--overwrite yes|no] [--summarize --provider <openrouter|openai|ollama> --model <model_id>] [--openrouter-api-url <url>] [--openai-api-url <url>] [--llm-timeout <seconds>] [--chunk-max-chars <n>] [--chunk-overlap-chars <n>] [--chunk-max-chunks <n>] [--chunk-cache-dir <path>]
 ```
 
 ## WebUI Benutzung (Flet)
@@ -62,9 +64,12 @@ YT_TRANSCRIPT_WEB_HOST=0.0.0.0 YT_TRANSCRIPT_WEB_PORT=8550 yt-transcript-web
 
 - Responsive UI (Desktop + Mobile Browser)
 - 3-stufiges Theme: **System / Light / Dark**
-- Eingaben: YouTube-URL, Provider (`openrouter` / `ollama`), Modell, Prompt-Datei, Sprachen, Overwrite-Toggle
+- Eingaben: YouTube-URL, Provider (`openrouter` / `openai` / `ollama`), Modell, Prompt-Datei, Sprachen, Overwrite-Toggle
 - Summarize ist in der WebUI fix auf **yes** gesetzt
-- Ollama-spezifische Felder werden nur bei `provider=ollama` eingeblendet
+- Provider-spezifische Felder werden dynamisch eingeblendet:
+  - `openrouter`: Endpoint + API-Key (maskiert)
+  - `openai`: Endpoint + API-Key (maskiert)
+  - `ollama`: Base URL + Generate Path
 - Kompakter Log-Bereich mit Fortschritt
 - Summary wird nach Abschluss direkt als Markdown in der UI gerendert
 - Ausgabedateien landen standardmäßig im Ordner `output/` (wird bei Bedarf angelegt)
@@ -92,7 +97,13 @@ yt-transcript "https://www.youtube.com/watch?v=dQw4w9WgXcQ" --lang de --lang en
 Transcript + Zusammenfassung über OpenRouter (Default Provider):
 
 ```bash
-OPENROUTER_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --model "openai/gpt-4o-mini"
+OPENROUTER_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --provider openrouter --model "openai/gpt-4o-mini"
+```
+
+Transcript + Zusammenfassung über OpenAI:
+
+```bash
+OPENAI_API_KEY="<dein_key>" yt-transcript "https://youtu.be/dQw4w9WgXcQ" --summarize --provider openai --model "gpt-4o-mini"
 ```
 
 Lange Transkripte mit Chunking + Cache (resumierbar):
@@ -176,7 +187,7 @@ Transcript-Zeilenformat:
 - `--summarize`
   - Aktiviert die Zusammenfassung nach dem Transcript-Abruf.
 
-- `--provider <openrouter|ollama>`
+- `--provider <openrouter|openai|ollama>`
   - Wählt den LLM-Provider.
   - Standard: `openrouter`
 
@@ -184,12 +195,21 @@ Transcript-Zeilenformat:
   - Modell-ID für den gewählten Provider.
   - Beispiele:
     - OpenRouter: `openai/gpt-4o-mini`
+    - OpenAI: `gpt-4o-mini`
     - Ollama: `qwen2.5:3b`
   - Pflicht, wenn `--summarize` gesetzt ist.
 
 - `--prompt-file <path>`
   - Pfad zur Prompt-Datei.
   - Standard: `prompt.md`
+
+- `--openrouter-api-url <url>`
+  - Eigener OpenRouter Chat-Completions Endpoint.
+  - Standard: `https://openrouter.ai/api/v1/chat/completions`
+
+- `--openai-api-url <url>`
+  - Eigener OpenAI Chat-Completions Endpoint.
+  - Standard: `https://api.openai.com/v1/chat/completions`
 
 - `--llm-timeout <seconds>`
   - Timeout für LLM-Requests.
@@ -233,12 +253,14 @@ Transcript-Zeilenformat:
 Platzhalter in `prompt.md`:
 - `{{SOURCE_URL}}`
 - `{{VIDEO_ID}}`
+- `{{LLM_PROVIDER}}`
 - `{{MODEL_NAME}}`
 - `{{TRANSCRIPT}}`
 
 Platzhalter in `prompt_chunks.md`:
 - `{{SOURCE_URL}}`
 - `{{VIDEO_ID}}`
+- `{{LLM_PROVIDER}}`
 - `{{MODEL_NAME}}`
 - `{{CHUNK_INDEX}}`
 - `{{CHUNK_START_CHAR}}`
@@ -246,6 +268,13 @@ Platzhalter in `prompt_chunks.md`:
 - `{{CHUNK_TEXT}}`
 
 ## Versionsverlauf
+
+- **0.9.0**
+  - Obsidian-Properties im Prompt auf `llm_provider` + `llm_model` umgestellt
+  - Neuer Prompt-Platzhalter `{{LLM_PROVIDER}}` in Pipeline und Prompt-Verarbeitung ergänzt
+  - `created_at` wird serverseitig auf das aktuelle Systemdatum (`YYYY-MM-DD`) gesetzt
+  - Post-Processing ergänzt: `created_at` im YAML-Frontmatter wird deterministisch ersetzt/ergänzt
+  - README auf aktuellen Provider-Stand aktualisiert (`openrouter`, `openai`, `ollama`)
 
 - **0.8.0**
   - `temperature` und `max_tokens` aus WebUI/Settings/Pipeline entfernt

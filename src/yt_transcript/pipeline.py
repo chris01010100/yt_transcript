@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -106,6 +107,7 @@ def fill_prompt_template(
     template: str,
     source_url: str,
     video_id: str,
+    provider_name: str,
     model_name: str,
     transcript: str,
 ) -> str:
@@ -113,6 +115,7 @@ def fill_prompt_template(
     return (
         template.replace("{{SOURCE_URL}}", source_url)
         .replace("{{VIDEO_ID}}", video_id)
+        .replace("{{LLM_PROVIDER}}", provider_name)
         .replace("{{MODEL_NAME}}", model_name)
         .replace("{{TRANSCRIPT}}", transcript)
     )
@@ -123,6 +126,7 @@ def fill_chunk_prompt_template(
     *,
     source_url: str,
     video_id: str,
+    provider_name: str,
     model_name: str,
     chunk_index: int,
     chunk_start_char: int,
@@ -133,6 +137,7 @@ def fill_chunk_prompt_template(
     return (
         template.replace("{{SOURCE_URL}}", source_url)
         .replace("{{VIDEO_ID}}", video_id)
+        .replace("{{LLM_PROVIDER}}", provider_name)
         .replace("{{MODEL_NAME}}", model_name)
         .replace("{{CHUNK_INDEX}}", str(chunk_index))
         .replace("{{CHUNK_START_CHAR}}", str(chunk_start_char))
@@ -180,6 +185,32 @@ def write_text_file(path: Path, content: str, *, overwrite: bool) -> None:
         raise OutputWriteError(f"Could not write file '{path}': {exc}") from exc
 
 
+def _set_created_at_date_frontmatter(markdown: str, created_at_date: str) -> str:
+    lines = markdown.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return markdown
+
+    end_index: int | None = None
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            end_index = idx
+            break
+
+    if end_index is None:
+        return markdown
+
+    created_at_line = f"- created_at: {created_at_date}"
+
+    for idx in range(1, end_index):
+        if lines[idx].lstrip().startswith("- created_at:"):
+            lines[idx] = created_at_line
+            break
+    else:
+        lines.insert(end_index, created_at_line)
+
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 def run_pipeline(
     config: PipelineConfig,
     *,
@@ -225,6 +256,7 @@ def run_pipeline(
         log("Loading prompt templates...")
         final_prompt_template = load_prompt_template(config.prompt_file)
         chunk_prompt_template = load_chunk_prompt_template()
+        created_at_date = datetime.now().date().isoformat()
 
         chunks = build_text_chunks(
             transcript_md,
@@ -275,6 +307,7 @@ def run_pipeline(
                 chunk_prompt_template,
                 source_url=config.youtube_url,
                 video_id=video_id,
+                provider_name=config.provider,
                 model_name=model,
                 chunk_index=chunk.index,
                 chunk_start_char=chunk.start_char,
@@ -320,6 +353,7 @@ def run_pipeline(
             final_prompt_template,
             source_url=config.youtube_url,
             video_id=video_id,
+            provider_name=config.provider,
             model_name=model,
             transcript=aggregated_chunk_summaries,
         )
@@ -340,6 +374,7 @@ def run_pipeline(
             openai_api_key=config.openai_api_key,
             openai_api_url=config.openai_api_url,
         )
+        summary_md = _set_created_at_date_frontmatter(summary_md, created_at_date)
         if progress:
             progress("final_summary", 1, 1)
 
