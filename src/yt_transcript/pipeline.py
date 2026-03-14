@@ -54,8 +54,8 @@ class PipelineConfig:
     chunk_cache_dir: Path
     openrouter_api_key: str | None = None
     openrouter_api_url: str | None = None
-    temperature: float | None = None
-    max_tokens: int | None = None
+    openai_api_key: str | None = None
+    openai_api_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -291,8 +291,8 @@ def run_pipeline(
                 ollama_generate_path=config.ollama_generate_path,
                 openrouter_api_key=config.openrouter_api_key,
                 openrouter_api_url=config.openrouter_api_url,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
+                openai_api_key=config.openai_api_key,
+                openai_api_url=config.openai_api_url,
             )
 
             save_chunk_summary(
@@ -337,8 +337,8 @@ def run_pipeline(
             ollama_generate_path=config.ollama_generate_path,
             openrouter_api_key=config.openrouter_api_key,
             openrouter_api_url=config.openrouter_api_url,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
+            openai_api_key=config.openai_api_key,
+            openai_api_url=config.openai_api_url,
         )
         if progress:
             progress("final_summary", 1, 1)

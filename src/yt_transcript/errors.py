@@ -29,6 +29,10 @@ class OpenRouterError(LLMError):
     """Raised when the OpenRouter API request fails."""
 
 
+class OpenAIError(LLMError):
+    """Raised when the OpenAI API request fails."""
+
+
 class OllamaError(LLMError):
     """Raised when an Ollama API request fails."""
 

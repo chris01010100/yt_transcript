@@ -247,6 +247,15 @@ Platzhalter in `prompt_chunks.md`:
 
 ## Versionsverlauf
 
+- **0.8.0**
+  - `temperature` und `max_tokens` aus WebUI/Settings/Pipeline entfernt
+  - Provider-Support erweitert: `openrouter`, `openai`, `ollama` (Ollama unverändert)
+  - Neue OpenAI-Client-Integration ergänzt (`openai_api.py`)
+  - WebUI um OpenAI-Endpoint + maskiertes OpenAI-API-Key-Feld erweitert
+  - Serverseitige Secrets-Nutzung für `openrouter` und `openai` vereinheitlicht (`~/.yt_transcript/secrets.json`)
+  - Provider-spezifische serverseitige Settings eingeführt (`selected_provider`, `openrouter_*`, `openai_*`)
+  - CLI um `--provider openai` sowie `--openrouter-api-url`/`--openai-api-url` erweitert
+
 - **0.7.0**
   - Serverseitige Persistenz für WebUI-Einstellungen ergänzt (`~/.yt_transcript/settings.json`)
   - Serverseitige, geschützte API-Key-Persistenz ergänzt (`~/.yt_transcript/secrets.json`, Modus 600)

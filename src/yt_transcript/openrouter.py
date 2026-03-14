@@ -21,8 +21,6 @@ def chat_completion(
     site_url: str | None = None,
     site_name: str | None = None,
     api_url: str | None = None,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
     timeout: float = 120.0,
 ) -> str:
     """Send a chat completion request to OpenRouter.
@@ -60,11 +58,6 @@ def chat_completion(
         "model": model,
         "messages": messages,
     }
-
-    if temperature is not None:
-        payload["temperature"] = temperature
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
 
     try:
         with httpx.Client(timeout=timeout) as client:

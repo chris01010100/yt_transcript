@@ -10,10 +10,11 @@ SETTINGS_DIR: Final[Path] = Path.home() / ".yt_transcript"
 SETTINGS_PATH: Final[Path] = SETTINGS_DIR / "settings.json"
 
 DEFAULT_SETTINGS: Final[dict[str, Any]] = {
-    "llm_endpoint": "https://openrouter.ai/api/v1/chat/completions",
-    "llm_model": "",
-    "temperature": 0.2,
-    "max_tokens": 1200,
+    "selected_provider": "openrouter",
+    "openrouter_endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "openrouter_model": "",
+    "openai_endpoint": "https://api.openai.com/v1/chat/completions",
+    "openai_model": "",
 }
 
 
@@ -25,27 +26,39 @@ def _normalize_settings(raw: Any) -> dict[str, Any]:
     merged = dict(DEFAULT_SETTINGS)
 
     if isinstance(raw, dict):
-        if raw.get("llm_endpoint") is not None:
-            merged["llm_endpoint"] = str(raw["llm_endpoint"])
-        if raw.get("llm_model") is not None:
-            merged["llm_model"] = str(raw["llm_model"])
+        selected = str(
+            raw.get("selected_provider", merged["selected_provider"])
+        ).strip()
+        if selected in {"openrouter", "openai", "ollama"}:
+            merged["selected_provider"] = selected
 
-        try:
-            merged["temperature"] = float(raw.get("temperature", merged["temperature"]))
-        except (TypeError, ValueError):
-            merged["temperature"] = DEFAULT_SETTINGS["temperature"]
+        legacy_endpoint = raw.get("llm_endpoint")
+        legacy_model = raw.get("llm_model")
 
-        try:
-            merged["max_tokens"] = int(raw.get("max_tokens", merged["max_tokens"]))
-        except (TypeError, ValueError):
-            merged["max_tokens"] = DEFAULT_SETTINGS["max_tokens"]
+        if raw.get("openrouter_endpoint") is not None:
+            merged["openrouter_endpoint"] = str(raw["openrouter_endpoint"])
+        elif legacy_endpoint is not None:
+            merged["openrouter_endpoint"] = str(legacy_endpoint)
+
+        if raw.get("openrouter_model") is not None:
+            merged["openrouter_model"] = str(raw["openrouter_model"])
+        elif legacy_model is not None:
+            merged["openrouter_model"] = str(legacy_model)
+
+        if raw.get("openai_endpoint") is not None:
+            merged["openai_endpoint"] = str(raw["openai_endpoint"])
+
+        if raw.get("openai_model") is not None:
+            merged["openai_model"] = str(raw["openai_model"])
 
     return merged
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     _ensure_dir()
-    fd, tmp_name = tempfile.mkstemp(prefix=".settings.", suffix=".tmp", dir=str(path.parent))
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=".settings.", suffix=".tmp", dir=str(path.parent)
+    )
     tmp_path = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--provider",
-        choices=["openrouter", "ollama"],
+        choices=["openrouter", "openai", "ollama"],
         default="openrouter",
         help="LLM provider for summarization. Default: openrouter",
     )
@@ -96,6 +96,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--ollama-generate-path",
         default="/api/generate",
         help="Ollama generate endpoint path. Default: /api/generate",
+    )
+
+    parser.add_argument(
+        "--openrouter-api-url",
+        default="https://openrouter.ai/api/v1/chat/completions",
+        help="OpenRouter chat completions endpoint URL.",
+    )
+
+    parser.add_argument(
+        "--openai-api-url",
+        default="https://api.openai.com/v1/chat/completions",
+        help="OpenAI chat completions endpoint URL.",
     )
 
     parser.add_argument(
@@ -160,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
         chunk_overlap_chars=args.chunk_overlap_chars,
         chunk_max_chunks=args.chunk_max_chunks,
         chunk_cache_dir=Path(args.chunk_cache_dir),
+        openrouter_api_url=args.openrouter_api_url,
+        openai_api_url=args.openai_api_url,
     )
 
     try:

@@ -106,31 +106,41 @@ async def app_main(page: ft.Page) -> None:
     except Exception:  # noqa: BLE001
         stored_settings = dict(DEFAULT_SETTINGS)
 
-    default_llm_endpoint = str(
-        stored_settings.get("llm_endpoint", DEFAULT_SETTINGS["llm_endpoint"])
+    selected_provider_default = str(
+        stored_settings.get("selected_provider", DEFAULT_SETTINGS["selected_provider"])
     )
-    default_llm_model = str(
-        stored_settings.get("llm_model", DEFAULT_SETTINGS["llm_model"])
+    if selected_provider_default not in {"openrouter", "openai", "ollama"}:
+        selected_provider_default = "openrouter"
+
+    openrouter_endpoint_default = str(
+        stored_settings.get(
+            "openrouter_endpoint", DEFAULT_SETTINGS["openrouter_endpoint"]
+        )
+    )
+    openai_endpoint_default = str(
+        stored_settings.get("openai_endpoint", DEFAULT_SETTINGS["openai_endpoint"])
     )
 
-    try:
-        default_temperature = float(
-            stored_settings.get("temperature", DEFAULT_SETTINGS["temperature"])
-        )
-    except (TypeError, ValueError):
-        default_temperature = float(DEFAULT_SETTINGS["temperature"])
-
-    try:
-        default_max_tokens = int(
-            stored_settings.get("max_tokens", DEFAULT_SETTINGS["max_tokens"])
-        )
-    except (TypeError, ValueError):
-        default_max_tokens = int(DEFAULT_SETTINGS["max_tokens"])
+    provider_models: dict[str, str] = {
+        "openrouter": str(
+            stored_settings.get(
+                "openrouter_model", DEFAULT_SETTINGS["openrouter_model"]
+            )
+        ),
+        "openai": str(
+            stored_settings.get("openai_model", DEFAULT_SETTINGS["openai_model"])
+        ),
+    }
 
     try:
         stored_openrouter_key = get_api_key("openrouter") or ""
     except Exception:  # noqa: BLE001
         stored_openrouter_key = ""
+
+    try:
+        stored_openai_key = get_api_key("openai") or ""
+    except Exception:  # noqa: BLE001
+        stored_openai_key = ""
 
     # --- Header / Theme ---
     theme_dropdown = ft.Dropdown(
@@ -152,38 +162,41 @@ async def app_main(page: ft.Page) -> None:
     )
     provider = ft.Dropdown(
         label="LLM Provider",
-        value="openrouter",
+        value=selected_provider_default,
         options=[
-            ft.dropdown.Option("openrouter"),
-            ft.dropdown.Option("ollama"),
+            ft.dropdown.Option("openrouter", "Openrouter"),
+            ft.dropdown.Option("openai", "OpenAI"),
+            ft.dropdown.Option("ollama", "Ollama"),
         ],
         width=220,
     )
     model = ft.TextField(
         label="Model",
         hint_text="openai/gpt-4o-mini oder qwen2.5:3b",
-        value=default_llm_model,
+        value=provider_models.get(selected_provider_default, ""),
         expand=True,
     )
 
     openrouter_endpoint = ft.TextField(
-        label="OpenRouter endpoint",
-        value=default_llm_endpoint,
+        label="Openrouter endpoint",
+        value=openrouter_endpoint_default,
         expand=True,
     )
-    temperature_field = ft.TextField(
-        label="Temperature",
-        value=str(default_temperature),
-        width=160,
-    )
-    max_tokens_field = ft.TextField(
-        label="Max tokens",
-        value=str(default_max_tokens),
-        width=180,
-    )
     openrouter_api_key = ft.TextField(
-        label="OpenRouter API Key",
+        label="Openrouter API Key",
         value=stored_openrouter_key,
+        password=True,
+        can_reveal_password=True,
+        expand=True,
+    )
+    openai_endpoint = ft.TextField(
+        label="OpenAI endpoint",
+        value=openai_endpoint_default,
+        expand=True,
+    )
+    openai_api_key = ft.TextField(
+        label="OpenAI API Key",
+        value=stored_openai_key,
         password=True,
         can_reveal_password=True,
         expand=True,
@@ -210,17 +223,15 @@ async def app_main(page: ft.Page) -> None:
     )
 
     openrouter_fields = ft.Column(
-        controls=[
-            openrouter_endpoint,
-            ft.Row(
-                controls=cast(list[ft.Control], [temperature_field, max_tokens_field]),
-                wrap=True,
-                spacing=10,
-            ),
-            openrouter_api_key,
-        ],
+        controls=[openrouter_endpoint, openrouter_api_key],
         spacing=10,
-        visible=True,
+        visible=False,
+    )
+
+    openai_fields = ft.Column(
+        controls=[openai_endpoint, openai_api_key],
+        spacing=10,
+        visible=False,
     )
 
     ollama_fields = ft.Column(
@@ -441,9 +452,9 @@ async def app_main(page: ft.Page) -> None:
         provider.disabled = running
         model.disabled = running
         openrouter_endpoint.disabled = running
-        temperature_field.disabled = running
-        max_tokens_field.disabled = running
         openrouter_api_key.disabled = running
+        openai_endpoint.disabled = running
+        openai_api_key.disabled = running
         lang_de.disabled = running
         lang_en.disabled = running
         lang_fr.disabled = running
@@ -488,12 +499,23 @@ async def app_main(page: ft.Page) -> None:
             return False
         return load_summary_from_path(latest)
 
+    def _selected_provider_value() -> str:
+        selected = (provider.value or "openrouter").strip().lower()
+        if selected in {"openrouter", "openai", "ollama"}:
+            return selected
+        return "openrouter"
+
     def _current_settings_payload() -> dict[str, Any]:
+        current_provider = _selected_provider_value()
+        if current_provider in {"openrouter", "openai"}:
+            provider_models[current_provider] = (model.value or "").strip()
+
         return {
-            "llm_endpoint": (openrouter_endpoint.value or "").strip(),
-            "llm_model": (model.value or "").strip(),
-            "temperature": (temperature_field.value or "").strip(),
-            "max_tokens": (max_tokens_field.value or "").strip(),
+            "selected_provider": current_provider,
+            "openrouter_endpoint": (openrouter_endpoint.value or "").strip(),
+            "openrouter_model": provider_models.get("openrouter", ""),
+            "openai_endpoint": (openai_endpoint.value or "").strip(),
+            "openai_model": provider_models.get("openai", ""),
         }
 
     def persist_settings_safely() -> None:
@@ -502,28 +524,18 @@ async def app_main(page: ft.Page) -> None:
         except Exception:  # noqa: BLE001
             add_log_line("Warning: Could not persist settings to server storage.")
 
-    def persist_openrouter_key_safely() -> None:
+    def persist_provider_keys_safely() -> None:
         try:
             set_api_key("openrouter", (openrouter_api_key.value or "").strip())
+            set_api_key("openai", (openai_api_key.value or "").strip())
         except Exception:  # noqa: BLE001
-            add_log_line("Warning: Could not persist OpenRouter API key.")
-
-    def parse_temperature_or_default() -> float:
-        try:
-            return float((temperature_field.value or "").strip())
-        except (TypeError, ValueError):
-            return default_temperature
-
-    def parse_max_tokens_or_default() -> int:
-        try:
-            return int((max_tokens_field.value or "").strip())
-        except (TypeError, ValueError):
-            return default_max_tokens
+            add_log_line("Warning: Could not persist API key.")
 
     def update_provider_visibility() -> None:
-        is_openrouter = provider.value == "openrouter"
-        openrouter_fields.visible = is_openrouter
-        ollama_fields.visible = provider.value == "ollama"
+        current_provider = _selected_provider_value()
+        openrouter_fields.visible = current_provider == "openrouter"
+        openai_fields.visible = current_provider == "openai"
+        ollama_fields.visible = current_provider == "ollama"
 
     async def drain_events_until_done(done_marker: asyncio.Event) -> None:
         nonlocal current_status, summary_value, result_path_value
@@ -609,6 +621,9 @@ async def app_main(page: ft.Page) -> None:
         page.update()
 
     async def on_provider_change(_: Any) -> None:
+        selected = _selected_provider_value()
+        if selected in {"openrouter", "openai"}:
+            model.value = provider_models.get(selected, "")
         persist_settings_safely()
         update_provider_visibility()
         page.update()
@@ -628,11 +643,12 @@ async def app_main(page: ft.Page) -> None:
         if is_running:
             return
         youtube_url.value = ""
-        provider.value = "openrouter"
-        model.value = str(DEFAULT_SETTINGS["llm_model"])
-        openrouter_endpoint.value = str(DEFAULT_SETTINGS["llm_endpoint"])
-        temperature_field.value = str(DEFAULT_SETTINGS["temperature"])
-        max_tokens_field.value = str(DEFAULT_SETTINGS["max_tokens"])
+        provider.value = str(DEFAULT_SETTINGS["selected_provider"])
+        provider_models["openrouter"] = str(DEFAULT_SETTINGS["openrouter_model"])
+        provider_models["openai"] = str(DEFAULT_SETTINGS["openai_model"])
+        model.value = provider_models.get(_selected_provider_value(), "")
+        openrouter_endpoint.value = str(DEFAULT_SETTINGS["openrouter_endpoint"])
+        openai_endpoint.value = str(DEFAULT_SETTINGS["openai_endpoint"])
         lang_de.value = True
         lang_en.value = True
         lang_fr.value = False
@@ -650,7 +666,7 @@ async def app_main(page: ft.Page) -> None:
         pending_download_bytes = None
         pending_download_requires_local_write = False
         persist_settings_safely()
-        persist_openrouter_key_safely()
+        persist_provider_keys_safely()
         rebuild_summary()
         update_provider_visibility()
         page.update()
@@ -682,7 +698,9 @@ async def app_main(page: ft.Page) -> None:
         page.update()
 
         persist_settings_safely()
-        persist_openrouter_key_safely()
+        persist_provider_keys_safely()
+
+        selected_provider = _selected_provider_value()
 
         config = PipelineConfig(
             youtube_url=(youtube_url.value or "").strip(),
@@ -692,7 +710,7 @@ async def app_main(page: ft.Page) -> None:
             overwrite=bool(overwrite_switch.value),
             full_timestamps=False,
             summarize=True,
-            provider=(provider.value or "openrouter"),
+            provider=selected_provider,
             model=(model.value or "").strip(),
             prompt_file=(prompt_file.value or "prompt.md").strip(),
             ollama_base_url=(ollama_base_url.value or "http://localhost:11434").strip(),
@@ -706,8 +724,8 @@ async def app_main(page: ft.Page) -> None:
             chunk_cache_dir=Path(".cache/yt-transcript"),
             openrouter_api_key=(openrouter_api_key.value or "").strip() or None,
             openrouter_api_url=(openrouter_endpoint.value or "").strip() or None,
-            temperature=parse_temperature_or_default(),
-            max_tokens=parse_max_tokens_or_default(),
+            openai_api_key=(openai_api_key.value or "").strip() or None,
+            openai_api_url=(openai_endpoint.value or "").strip() or None,
         )
 
         done = asyncio.Event()
@@ -827,9 +845,9 @@ async def app_main(page: ft.Page) -> None:
     provider.on_select = lambda e: asyncio.create_task(on_provider_change(e))
     model.on_change = lambda _: persist_settings_safely()
     openrouter_endpoint.on_change = lambda _: persist_settings_safely()
-    temperature_field.on_change = lambda _: persist_settings_safely()
-    max_tokens_field.on_change = lambda _: persist_settings_safely()
-    openrouter_api_key.on_change = lambda _: persist_openrouter_key_safely()
+    openai_endpoint.on_change = lambda _: persist_settings_safely()
+    openrouter_api_key.on_change = lambda _: persist_provider_keys_safely()
+    openai_api_key.on_change = lambda _: persist_provider_keys_safely()
     run_button.on_click = lambda e: asyncio.create_task(on_run(e))
     reset_button.on_click = lambda e: asyncio.create_task(on_reset(e))
     reload_button.on_click = lambda e: asyncio.create_task(on_reload(e))
@@ -876,6 +894,7 @@ async def app_main(page: ft.Page) -> None:
         ),
         prompt_file,
         openrouter_fields,
+        openai_fields,
         ollama_fields,
         ft.Row(
             controls=cast(list[ft.Control], [run_button, reset_button, progress_ring]),
