@@ -22,6 +22,7 @@ from .errors import (
     PromptFileNotFound,
 )
 from .formatting import sanitize_filename, transcript_to_markdown
+from .frontmatter import normalize_summary_markdown
 from .llm_router import summarize as llm_summarize
 from .youtube import (
     extract_video_id,
@@ -183,32 +184,6 @@ def write_text_file(path: Path, content: str, *, overwrite: bool) -> None:
         path.write_text(content, encoding="utf-8")
     except OSError as exc:
         raise OutputWriteError(f"Could not write file '{path}': {exc}") from exc
-
-
-def _set_created_at_date_frontmatter(markdown: str, created_at_date: str) -> str:
-    lines = markdown.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return markdown
-
-    end_index: int | None = None
-    for idx in range(1, len(lines)):
-        if lines[idx].strip() == "---":
-            end_index = idx
-            break
-
-    if end_index is None:
-        return markdown
-
-    created_at_line = f"- created_at: {created_at_date}"
-
-    for idx in range(1, end_index):
-        if lines[idx].lstrip().startswith("- created_at:"):
-            lines[idx] = created_at_line
-            break
-    else:
-        lines.insert(end_index, created_at_line)
-
-    return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def run_pipeline(
@@ -374,7 +349,16 @@ def run_pipeline(
             openai_api_key=config.openai_api_key,
             openai_api_url=config.openai_api_url,
         )
-        summary_md = _set_created_at_date_frontmatter(summary_md, created_at_date)
+        summary_md = normalize_summary_markdown(
+            summary_md,
+            source_url=config.youtube_url,
+            video_id=video_id,
+            llm_provider=config.provider,
+            llm_model=model,
+            created_at=created_at_date,
+            default_title=title,
+            language=(config.languages[0] if config.languages else "de"),
+        )
         if progress:
             progress("final_summary", 1, 1)
 

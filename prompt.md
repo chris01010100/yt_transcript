@@ -16,14 +16,14 @@ Gib ausschließlich eine Markdown-Datei zurück.
 
 Obsidian Properties:
 ---
-- title: <VIDEO_Title>
-- source_url: <URL>
-- video_id: <VIDEO_ID>
-- language: de
-- llm_provider: <LLM_PROVIDER>
-- llm_model: <MODEL_NAME>
-- created_at: <YYYY-MM-DD>
-- tags: []
+title: <VIDEO_Title>
+source_url: <URL>
+video_id: <VIDEO_ID>
+language: de
+llm_provider: <LLM_PROVIDER>
+llm_model: <MODEL_NAME>
+created_at: <YYYY-MM-DD>
+tags: [youtube, transcript, ...]
 ---
 
 MARKDOWN-INHALT

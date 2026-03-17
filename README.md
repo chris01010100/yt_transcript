@@ -269,11 +269,18 @@ Platzhalter in `prompt_chunks.md`:
 
 ## Versionsverlauf
 
+- **0.9.1**
+  - Frontmatter-Handling weiter gehärtet: uneinheitliche LLM-Ausgaben (mehrere Header, Listen-/Mapping-Stil, Code-Fences) werden serverseitig normalisiert
+  - `created_at` wird nun zuverlässig genau einmal als Systemdatum (`YYYY-MM-DD`) gesetzt
+  - Doppelte oder angehängte `created_at`-Einträge in Summary-Dateien werden verhindert
+  - Neues Modul `frontmatter.py` für deterministisches Rebuild des Obsidian-Frontmatters
+
 - **0.9.0**
   - Obsidian-Properties im Prompt auf `llm_provider` + `llm_model` umgestellt
   - Neuer Prompt-Platzhalter `{{LLM_PROVIDER}}` in Pipeline und Prompt-Verarbeitung ergänzt
   - `created_at` wird serverseitig auf das aktuelle Systemdatum (`YYYY-MM-DD`) gesetzt
-  - Post-Processing ergänzt: `created_at` im YAML-Frontmatter wird deterministisch ersetzt/ergänzt
+  - Frontmatter-Normalisierung ergänzt: Modellabhängige/uneinheitliche Header werden serverseitig entfernt und deterministisch neu aufgebaut
+  - Mehrfache Frontmatter-Blöcke sowie inkonsistente `created_at`-Zeilen werden dadurch verhindert
   - README auf aktuellen Provider-Stand aktualisiert (`openrouter`, `openai`, `ollama`)
 
 - **0.8.0**
